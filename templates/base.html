@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}POS IoT{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% if session.esercente_id %}
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo">P</div>
+            <span>POS IoT</span>
+            <span style="color: var(--text-muted); font-weight: 400; font-size: 14px;">
+                · {{ session.esercente_nome }}
+            </span>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('utenti') }}">Utenti</a>
+            <a href="{{ url_for('ricarica') }}">Ricarica</a>
+            <a href="{{ url_for('ricariche') }}">Storico QR</a>
+            <a href="{{ url_for('transazioni') }}">Transazioni</a>
+            <a href="{{ url_for('logout') }}" class="logout">Esci</a>
+        </div>
+    </nav>
+    {% endif %}
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

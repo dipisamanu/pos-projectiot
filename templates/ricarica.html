@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Nuova ricarica - POS IoT{% endblock %}
+
+{% block content %}
+<h1>Nuova ricarica</h1>
+<p class="subtitle">Genera un QR code che il cliente potra scannerizzare con l'app</p>
+
+<div class="card">
+    {% if errore %}
+        <div class="alert error">{{ errore }}</div>
+    {% endif %}
+    <form method="POST">
+        <label>
+            Importo da ricaricare (EUR)
+            <input type="number" name="importo" required step="0.01" min="0.01" autofocus placeholder="es. 50.00">
+        </label>
+        <button type="submit" class="btn primary">Genera QR code</button>
+    </form>
+</div>
+{% endblock %}

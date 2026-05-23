@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - POS IoT{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+<p class="subtitle">Benvenuto, {{ esercente_nome }}</p>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-num">{{ num_utenti }}</div>
+        <div class="stat-label">Utenti registrati</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-num">{{ num_trans }}</div>
+        <div class="stat-label">Transazioni totali</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-num">{{ num_ricar }}</div>
+        <div class="stat-label">Ricariche completate</div>
+    </div>
+</div>
+
+<div class="action-grid">
+    <a href="{{ url_for('ricarica') }}" class="action-card">
+        <h3>Nuova ricarica</h3>
+        <p>Genera un QR code per ricaricare il saldo di un cliente</p>
+    </a>
+    <a href="{{ url_for('utenti') }}" class="action-card">
+        <h3>Gestione utenti</h3>
+        <p>Visualizza e registra nuovi clienti</p>
+    </a>
+    <a href="{{ url_for('transazioni') }}" class="action-card">
+        <h3>Storico transazioni</h3>
+        <p>Ultime 100 transazioni dal POS</p>
+    </a>
+</div>
+{% endblock %}

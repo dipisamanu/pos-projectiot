@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Login - POS IoT{% endblock %}
+
+{% block content %}
+<div class="card login-card">
+    <h1>Accesso Esercente</h1>
+    {% if errore %}
+        <div class="alert error">{{ errore }}</div>
+    {% endif %}
+    <form method="POST">
+        <label>
+            Username
+            <input type="text" name="username" required autofocus>
+        </label>
+        <label>
+            Password
+            <input type="password" name="password" required>
+        </label>
+        <button type="submit" class="btn primary">Accedi</button>
+    </form>
+    <p class="hint">Test: admin / admin123</p>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ricarica - POS IoT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pay-page">
+    <div class="pay-container">
+        <h1>Ricarica conto</h1>
+
+        {% if successo %}
+            <div class="pay-success">
+                <h2>Ricarica completata</h2>
+                <p>Cliente: <strong>{{ nome_utente }}</strong></p>
+                <p>Accreditato: <strong>{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
+                <p>Nuovo saldo: <strong>{{ "%.2f"|format(nuovo_saldo) }} EUR</strong></p>
+            </div>
+        {% elif errore %}
+            <div class="alert error">{{ errore }}</div>
+            {% if ricarica %}
+                <p>Importo: {{ "%.2f"|format(ricarica.importo) }} EUR</p>
+                <p>Negozio: {{ ricarica.nome_negozio }}</p>
+            {% endif %}
+        {% else %}
+            <div class="pay-info">
+                <p>Negozio: <strong>{{ ricarica.nome_negozio }}</strong></p>
+                <p>Importo da accreditare: <strong>{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
+            </div>
+            <form method="POST">
+                <label>
+                    UID della tua carta
+                    <input type="text" name="uid" required autofocus inputmode="numeric">
+                </label>
+                <label>
+                    PIN
+                    <input type="password" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric">
+                </label>
+                <button type="submit" class="btn primary big">Conferma ricarica</button>
+            </form>
+        {% endif %}
+    </div>
+</body>
+</html>

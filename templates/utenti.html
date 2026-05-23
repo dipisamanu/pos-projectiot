@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Utenti - POS IoT{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Utenti</h1>
+    <a href="{{ url_for('nuovo_utente') }}" class="btn primary">+ Nuovo utente</a>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>UID Carta</th>
+            <th>Saldo</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for u in utenti %}
+        <tr>
+            <td>{{ u.nome }}</td>
+            <td class="mono">{{ u.uid }}</td>
+            <td class="amount">{{ "%.2f"|format(u.saldo) }} EUR</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="empty">Nessun utente registrato</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

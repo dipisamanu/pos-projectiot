@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}QR code attivo - POS IoT{% endblock %}
+
+{% block content %}
+<h1>QR code generato</h1>
+<p class="subtitle">Il cliente puo scannerizzarlo per ricevere la ricarica</p>
+
+<div class="qr-container">
+    <div class="qr-info">
+        <div class="qr-importo">{{ "%.2f"|format(ricarica.importo) }} EUR</div>
+        <div class="qr-meta">
+            <p><strong>Validita:</strong> 5 minuti</p>
+            <p><strong>Stato:</strong> <span class="badge pending">{{ ricarica.stato }}</span></p>
+            <p class="mono small">{{ url_pagamento }}</p>
+        </div>
+        <div class="qr-actions">
+            <a href="{{ url_for('ricarica') }}" class="btn primary">Nuova ricarica</a>
+            <a href="{{ url_for('dashboard') }}" class="btn">Torna alla dashboard</a>
+        </div>
+    </div>
+    <div class="qr-image">
+        <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR code ricarica">
+    </div>
+</div>
+
+<script>
+    // Ricarica la pagina ogni 5 secondi per vedere lo stato aggiornato
+    setTimeout(function() { location.reload(); }, 5000);
+</script>
+{% endblock %}
