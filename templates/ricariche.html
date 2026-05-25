@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Storico ricariche - POS IoT{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Le tue ricariche</h1>
+        <p class="subtitle">L'identita di chi ha completato le ricariche non e mostrata per tutelare la privacy</p>
+    </div>
+    <a href="{{ url_for('ricarica') }}" class="btn primary">+ Nuova ricarica</a>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Data creazione</th>
+            <th>Importo</th>
+            <th>Data completamento</th>
+            <th>Stato</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in ricariche %}
+        <tr>
+            <td class="mono">#{{ "%05d"|format(r.id) }}</td>
+            <td>{{ r.data_creazione.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+            <td class="amount">{{ "%.2f"|format(r.importo) }} EUR</td>
+            <td>{{ r.data_completata.strftime('%d/%m %H:%M') if r.data_completata else '—' }}</td>
+            <td>
+                {% if r.stato == 'COMPLETATA' %}
+                    <span class="badge success">{{ r.stato }}</span>
+                {% elif r.stato == 'PENDING' %}
+                    <span class="badge pending">{{ r.stato }}</span>
+                {% else %}
+                    <span class="badge muted">{{ r.stato }}</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">Non hai ancora generato ricariche</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -3,23 +3,24 @@
 
 {% block content %}
 <h1>Registra nuovo utente</h1>
+<p class="subtitle">Inserisci i dati del cliente e dell'UID della sua carta NFC</p>
 
-<div class="card">
+<div class="card" style="max-width: 480px;">
     {% if errore %}
         <div class="alert error">{{ errore }}</div>
     {% endif %}
     <form method="POST">
         <label>
             UID della carta NFC
-            <input type="text" name="uid" required placeholder="es. 584195345601">
+            <input type="text" name="uid" required placeholder="es. 584195345601" autofocus>
         </label>
         <label>
             Nome e cognome
-            <input type="text" name="nome" required>
+            <input type="text" name="nome" required placeholder="es. Mario Rossi">
         </label>
         <label>
             PIN (4 cifre)
-            <input type="text" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric">
+            <input type="text" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="1234">
         </label>
         <label>
             Saldo iniziale (EUR)

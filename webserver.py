@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Server web del POS IoT - versione 2
-Aggiunte: dettaglio utente, modifica saldo, storico ricariche,
-annulla QR, polling stato QR, cerca utenti.
+Server web POS IoT - versione privacy-oriented
+Differenza per ruolo:
+  - admin:     vede statistiche generali, lista nomi utenti, transazioni anonimizzate
+  - esercente: vede solo le PROPRIE ricariche e puo registrare nuovi utenti
+Nessun ruolo vede saldi altrui o storico transazioni dettagliato dei singoli utenti.
 """
 
 import hashlib
@@ -21,10 +23,8 @@ from flask_cors import CORS
 
 
 DB_CONFIG = {
-    'host':     'localhost',
-    'database': 'iot_db',
-    'user':     'admin',
-    'password': 'password'
+    'host': 'localhost', 'database': 'iot_db',
+    'user': 'admin',     'password': 'password'
 }
 QR_VALIDITA_SECONDI = 300
 
@@ -75,6 +75,27 @@ def login_richiesto(f):
     return wrapper
 
 
+def admin_richiesto(f):
+    # Blocca accesso alle route admin-only
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'esercente_id' not in session:
+            return redirect(url_for('login'))
+        if session.get('ruolo') != 'admin':
+            abort(403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+# Rende la variabile ruolo disponibile in tutti i template
+@app.context_processor
+def inject_user():
+    return dict(
+        ruolo=session.get('ruolo'),
+        esercente_nome=session.get('esercente_nome')
+    )
+
+
 # ============================================================
 # Auth
 # ============================================================
@@ -92,13 +113,12 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        esercente = query(
-            'SELECT * FROM esercenti WHERE username = %s',
-            (username,), fetch=True, one=True
-        )
-        if esercente and esercente['password_hash'] == hash_pwd(password):
-            session['esercente_id']   = esercente['id']
-            session['esercente_nome'] = esercente['nome_negozio']
+        e = query('SELECT * FROM esercenti WHERE username = %s',
+                  (username,), fetch=True, one=True)
+        if e and e['password_hash'] == hash_pwd(password):
+            session['esercente_id']   = e['id']
+            session['esercente_nome'] = e['nome_negozio']
+            session['ruolo']          = e['ruolo']
             return redirect(url_for('dashboard'))
         errore = 'Credenziali non valide'
     return render_template('login.html', errore=errore)
@@ -111,96 +131,70 @@ def logout():
 
 
 # ============================================================
-# Dashboard
+# Dashboard (vista diversa per admin / esercente)
 # ============================================================
 
 @app.route('/dashboard')
 @login_richiesto
 def dashboard():
-    num_utenti = query('SELECT COUNT(*) AS n FROM utenti', fetch=True, one=True)['n']
-    num_trans  = query('SELECT COUNT(*) AS n FROM transazioni', fetch=True, one=True)['n']
-    num_ricar  = query(
-        'SELECT COUNT(*) AS n FROM ricariche WHERE id_esercente = %s AND stato = %s',
-        (session['esercente_id'], 'COMPLETATA'), fetch=True, one=True
+    if session.get('ruolo') == 'admin':
+        # Admin vede statistiche aggregate (numeri, no dati personali)
+        return render_template(
+            'dashboard.html',
+            modalita='admin',
+            num_utenti=query('SELECT COUNT(*) AS n FROM utenti', fetch=True, one=True)['n'],
+            num_trans=query('SELECT COUNT(*) AS n FROM transazioni', fetch=True, one=True)['n'],
+            num_ricar=query("SELECT COUNT(*) AS n FROM ricariche WHERE stato='COMPLETATA'",
+                            fetch=True, one=True)['n'],
+            num_esercenti=query('SELECT COUNT(*) AS n FROM esercenti', fetch=True, one=True)['n']
+        )
+
+    # Esercente normale: solo statistiche proprie
+    num_proprie = query(
+        "SELECT COUNT(*) AS n FROM ricariche WHERE id_esercente=%s AND stato='COMPLETATA'",
+        (session['esercente_id'],), fetch=True, one=True
     )['n']
-    totale_circolante = query(
-        'SELECT COALESCE(SUM(saldo), 0) AS tot FROM utenti', fetch=True, one=True
+    tot_proprie = query(
+        "SELECT COALESCE(SUM(importo), 0) AS tot FROM ricariche WHERE id_esercente=%s AND stato='COMPLETATA'",
+        (session['esercente_id'],), fetch=True, one=True
     )['tot']
-    ultime_trans = query(
-        '''SELECT data_ora, nome_utente, importo, esito
-           FROM transazioni ORDER BY data_ora DESC LIMIT 5''', fetch=True
-    )
+    pending_proprie = query(
+        "SELECT COUNT(*) AS n FROM ricariche WHERE id_esercente=%s AND stato='PENDING' AND scadenza > NOW()",
+        (session['esercente_id'],), fetch=True, one=True
+    )['n']
     return render_template(
         'dashboard.html',
-        num_utenti=num_utenti,
-        num_trans=num_trans,
-        num_ricar=num_ricar,
-        totale_circolante=float(totale_circolante),
-        ultime_trans=ultime_trans
+        modalita='esercente',
+        num_proprie=num_proprie,
+        tot_proprie=float(tot_proprie),
+        pending_proprie=pending_proprie
     )
 
 
 # ============================================================
-# Utenti
+# Utenti (solo admin vede la lista, e solo i nomi)
 # ============================================================
 
 @app.route('/utenti')
-@login_richiesto
+@admin_richiesto
 def utenti():
     cerca = request.args.get('q', '').strip()
     if cerca:
+        # Solo nome, niente UID né saldo
         lista = query(
-            '''SELECT id, uid, nome, saldo FROM utenti
-               WHERE LOWER(nome) LIKE %s OR uid LIKE %s
-               ORDER BY nome''',
-            (f'%{cerca.lower()}%', f'%{cerca}%'), fetch=True
+            "SELECT id, nome FROM utenti WHERE LOWER(nome) LIKE %s ORDER BY nome",
+            (f'%{cerca.lower()}%',), fetch=True
         )
     else:
-        lista = query('SELECT id, uid, nome, saldo FROM utenti ORDER BY nome', fetch=True)
+        lista = query('SELECT id, nome FROM utenti ORDER BY nome', fetch=True)
     return render_template('utenti.html', utenti=lista, cerca=cerca)
-
-
-@app.route('/utenti/<int:id_utente>')
-@login_richiesto
-def dettaglio_utente(id_utente):
-    u = query('SELECT * FROM utenti WHERE id = %s', (id_utente,), fetch=True, one=True)
-    if not u:
-        abort(404)
-    trans = query(
-        '''SELECT data_ora, importo, saldo_dopo, esito
-           FROM transazioni WHERE uid_carta = %s
-           ORDER BY data_ora DESC LIMIT 30''', (u['uid'],), fetch=True
-    )
-    ricariche = query(
-        '''SELECT r.data_completata, r.importo, e.nome_negozio
-           FROM ricariche r JOIN esercenti e ON e.id = r.id_esercente
-           WHERE r.id_utente_riceve = %s AND r.stato = %s
-           ORDER BY r.data_completata DESC LIMIT 30''',
-        (id_utente, 'COMPLETATA'), fetch=True
-    )
-    return render_template('dettaglio_utente.html', utente=u, trans=trans, ricariche=ricariche)
-
-
-@app.route('/utenti/<int:id_utente>/saldo', methods=['POST'])
-@login_richiesto
-def modifica_saldo(id_utente):
-    # Permette all'esercente di accreditare/scalare saldo manualmente
-    try:
-        delta = float(request.form.get('delta', 0))
-    except ValueError:
-        return redirect(url_for('dettaglio_utente', id_utente=id_utente))
-    u = query('SELECT saldo FROM utenti WHERE id = %s', (id_utente,), fetch=True, one=True)
-    if u:
-        nuovo = float(u['saldo']) + delta
-        if nuovo < 0:
-            nuovo = 0
-        query('UPDATE utenti SET saldo = %s WHERE id = %s', (nuovo, id_utente))
-    return redirect(url_for('dettaglio_utente', id_utente=id_utente))
 
 
 @app.route('/utenti/nuovo', methods=['GET', 'POST'])
 @login_richiesto
 def nuovo_utente():
+    # Sia admin sia esercente possono registrare un nuovo cliente
+    # perche e l'esercente che gli assegna fisicamente la carta NFC
     errore = None
     if request.method == 'POST':
         uid   = request.form.get('uid', '').strip()
@@ -218,33 +212,35 @@ def nuovo_utente():
             except ValueError:
                 errore = 'Saldo non valido'
         if errore is None:
-            if query('SELECT id FROM utenti WHERE uid = %s', (uid,), fetch=True, one=True):
+            if query('SELECT id FROM utenti WHERE uid=%s', (uid,), fetch=True, one=True):
                 errore = 'Esiste gia un utente con questo UID'
             else:
                 query(
                     'INSERT INTO utenti (uid, nome, pin_hash, saldo) VALUES (%s, %s, %s, %s)',
                     (uid, nome, hash_pwd(pin), saldo_n)
                 )
-                return redirect(url_for('utenti'))
+                return redirect(url_for('dashboard'))
     return render_template('nuovo_utente.html', errore=errore)
 
 
 # ============================================================
-# Transazioni
+# Transazioni POS (solo admin, dati anonimizzati)
 # ============================================================
 
 @app.route('/transazioni')
-@login_richiesto
+@admin_richiesto
 def transazioni():
+    # Solo ID, data, importo ed esito. NO nome utente, NO saldi prima/dopo
     lista = query(
-        '''SELECT data_ora, nome_utente, importo, saldo_dopo, esito
-           FROM transazioni ORDER BY data_ora DESC LIMIT 100''', fetch=True
+        '''SELECT id, data_ora, importo, esito
+           FROM transazioni ORDER BY data_ora DESC LIMIT 100''',
+        fetch=True
     )
     return render_template('transazioni.html', transazioni=lista)
 
 
 # ============================================================
-# Ricariche
+# Ricariche (ognuno vede le proprie)
 # ============================================================
 
 @app.route('/ricarica', methods=['GET', 'POST'])
@@ -289,18 +285,16 @@ def qr_attivo(token):
 @app.route('/qr/<token>/stato')
 @login_richiesto
 def qr_stato(token):
-    # Endpoint JSON usato dal JavaScript per fare polling
+    # NON espone il nome dell'utente che ha completato (privacy)
     r = query(
-        '''SELECT r.stato, r.data_completata, u.nome AS nome_utente
-           FROM ricariche r LEFT JOIN utenti u ON u.id = r.id_utente_riceve
-           WHERE r.token = %s AND r.id_esercente = %s''',
+        '''SELECT stato, data_completata FROM ricariche
+           WHERE token=%s AND id_esercente=%s''',
         (token, session['esercente_id']), fetch=True, one=True
     )
     if not r:
         return jsonify({'errore': 'non trovato'}), 404
     return jsonify({
-        'stato':         r['stato'],
-        'nome_utente':   r['nome_utente'],
+        'stato':           r['stato'],
         'data_completata': r['data_completata'].strftime('%H:%M:%S') if r['data_completata'] else None
     })
 
@@ -309,8 +303,9 @@ def qr_stato(token):
 @login_richiesto
 def qr_annulla(token):
     query(
-        '''UPDATE ricariche SET stato = %s WHERE token = %s AND id_esercente = %s AND stato = %s''',
-        ('ANNULLATA', token, session['esercente_id'], 'PENDING')
+        """UPDATE ricariche SET stato='ANNULLATA'
+           WHERE token=%s AND id_esercente=%s AND stato='PENDING'""",
+        (token, session['esercente_id'])
     )
     return redirect(url_for('ricariche'))
 
@@ -318,18 +313,18 @@ def qr_annulla(token):
 @app.route('/ricariche')
 @login_richiesto
 def ricariche():
+    # NON include nome del destinatario per privacy
     lista = query(
-        '''SELECT r.*, u.nome AS nome_destinatario
-           FROM ricariche r LEFT JOIN utenti u ON u.id = r.id_utente_riceve
-           WHERE r.id_esercente = %s
-           ORDER BY r.data_creazione DESC LIMIT 100''',
+        '''SELECT id, token, importo, stato, data_creazione, data_completata, scadenza
+           FROM ricariche WHERE id_esercente=%s
+           ORDER BY data_creazione DESC LIMIT 100''',
         (session['esercente_id'],), fetch=True
     )
     return render_template('ricariche.html', ricariche=lista)
 
 
 # ============================================================
-# Pagina cliente
+# Pagina cliente (mobile, accessibile via QR scan)
 # ============================================================
 
 @app.route('/pay/<token>', methods=['GET', 'POST'])
@@ -343,25 +338,26 @@ def pay_cliente(token):
         return render_template('pay_cliente.html', errore='Token non valido', ricarica=None)
     if r['stato'] != 'PENDING':
         return render_template('pay_cliente.html',
-                               errore='Questa ricarica e gia stata gestita o annullata', ricarica=r)
+                               errore='Questa ricarica e gia stata gestita o annullata',
+                               ricarica=r)
     if r['scadenza'] < datetime.now():
-        query('UPDATE ricariche SET stato = %s WHERE id = %s', ('SCADUTA', r['id']))
+        query("UPDATE ricariche SET stato='SCADUTA' WHERE id=%s", (r['id'],))
         return render_template('pay_cliente.html', errore='Ricarica scaduta', ricarica=r)
 
     if request.method == 'POST':
         uid = request.form.get('uid', '').strip()
         pin = request.form.get('pin', '').strip()
-        utente = query('SELECT * FROM utenti WHERE uid = %s', (uid,), fetch=True, one=True)
+        utente = query('SELECT * FROM utenti WHERE uid=%s', (uid,), fetch=True, one=True)
         if not utente:
             return render_template('pay_cliente.html', errore='UID non trovato', ricarica=r)
         if utente['pin_hash'] != hash_pwd(pin):
             return render_template('pay_cliente.html', errore='PIN errato', ricarica=r)
         nuovo_saldo = float(utente['saldo']) + float(r['importo'])
-        query('UPDATE utenti SET saldo = %s WHERE id = %s', (nuovo_saldo, utente['id']))
+        query('UPDATE utenti SET saldo=%s WHERE id=%s', (nuovo_saldo, utente['id']))
         query(
-            '''UPDATE ricariche SET stato = %s, id_utente_riceve = %s, data_completata = NOW()
-               WHERE id = %s''',
-            ('COMPLETATA', utente['id'], r['id'])
+            '''UPDATE ricariche SET stato='COMPLETATA', id_utente_riceve=%s, data_completata=NOW()
+               WHERE id=%s''',
+            (utente['id'], r['id'])
         )
         return render_template('pay_cliente.html', successo=True, ricarica=r,
                                nome_utente=utente['nome'], nuovo_saldo=nuovo_saldo)
@@ -369,7 +365,7 @@ def pay_cliente(token):
 
 
 # ============================================================
-# API REST per Flutter
+# API REST per app Flutter (il cliente vede SOLO i suoi dati)
 # ============================================================
 
 @app.route('/api/login', methods=['POST'])
@@ -377,37 +373,36 @@ def api_login():
     data = request.get_json() or {}
     uid  = str(data.get('uid', '')).strip()
     pin  = str(data.get('pin', '')).strip()
-    utente = query('SELECT id, uid, nome, pin_hash, saldo FROM utenti WHERE uid = %s',
-                   (uid,), fetch=True, one=True)
-    if not utente or utente['pin_hash'] != hash_pwd(pin):
+    u = query('SELECT id, uid, nome, pin_hash, saldo FROM utenti WHERE uid=%s',
+              (uid,), fetch=True, one=True)
+    if not u or u['pin_hash'] != hash_pwd(pin):
         return jsonify({'success': False, 'errore': 'Credenziali non valide'}), 401
     return jsonify({
         'success': True,
-        'utente': {'id': utente['id'], 'uid': utente['uid'],
-                   'nome': utente['nome'], 'saldo': float(utente['saldo'])}
+        'utente': {'id': u['id'], 'uid': u['uid'], 'nome': u['nome'], 'saldo': float(u['saldo'])}
     })
 
 
 @app.route('/api/saldo', methods=['POST'])
 def api_saldo():
     data = request.get_json() or {}
-    utente = query('SELECT pin_hash, saldo FROM utenti WHERE uid = %s',
-                   (str(data.get('uid', '')),), fetch=True, one=True)
-    if not utente or utente['pin_hash'] != hash_pwd(str(data.get('pin', ''))):
+    u = query('SELECT pin_hash, saldo FROM utenti WHERE uid=%s',
+              (str(data.get('uid', '')),), fetch=True, one=True)
+    if not u or u['pin_hash'] != hash_pwd(str(data.get('pin', ''))):
         return jsonify({'success': False}), 401
-    return jsonify({'success': True, 'saldo': float(utente['saldo'])})
+    return jsonify({'success': True, 'saldo': float(u['saldo'])})
 
 
 @app.route('/api/transazioni', methods=['POST'])
 def api_transazioni():
     data = request.get_json() or {}
     uid  = str(data.get('uid', ''))
-    utente = query('SELECT pin_hash FROM utenti WHERE uid = %s', (uid,), fetch=True, one=True)
-    if not utente or utente['pin_hash'] != hash_pwd(str(data.get('pin', ''))):
+    u = query('SELECT pin_hash FROM utenti WHERE uid=%s', (uid,), fetch=True, one=True)
+    if not u or u['pin_hash'] != hash_pwd(str(data.get('pin', ''))):
         return jsonify({'success': False}), 401
     trans = query(
         '''SELECT data_ora, importo, saldo_dopo, esito FROM transazioni
-           WHERE uid_carta = %s ORDER BY data_ora DESC LIMIT 50''',
+           WHERE uid_carta=%s ORDER BY data_ora DESC LIMIT 50''',
         (uid,), fetch=True
     )
     for t in trans:
@@ -423,37 +418,49 @@ def api_ricarica():
     token = data.get('token', '')
     uid   = str(data.get('uid', ''))
     pin   = str(data.get('pin', ''))
-    utente = query('SELECT * FROM utenti WHERE uid = %s', (uid,), fetch=True, one=True)
-    if not utente or utente['pin_hash'] != hash_pwd(pin):
+    u = query('SELECT * FROM utenti WHERE uid=%s', (uid,), fetch=True, one=True)
+    if not u or u['pin_hash'] != hash_pwd(pin):
         return jsonify({'success': False, 'errore': 'Credenziali non valide'}), 401
-    r = query('SELECT * FROM ricariche WHERE token = %s', (token,), fetch=True, one=True)
+    r = query('SELECT * FROM ricariche WHERE token=%s', (token,), fetch=True, one=True)
     if not r:
         return jsonify({'success': False, 'errore': 'Token non valido'}), 404
     if r['stato'] != 'PENDING':
         return jsonify({'success': False, 'errore': 'Ricarica gia usata o annullata'}), 400
     if r['scadenza'] < datetime.now():
-        query('UPDATE ricariche SET stato = %s WHERE id = %s', ('SCADUTA', r['id']))
+        query("UPDATE ricariche SET stato='SCADUTA' WHERE id=%s", (r['id'],))
         return jsonify({'success': False, 'errore': 'Ricarica scaduta'}), 400
-    nuovo_saldo = float(utente['saldo']) + float(r['importo'])
-    query('UPDATE utenti SET saldo = %s WHERE id = %s', (nuovo_saldo, utente['id']))
+    nuovo_saldo = float(u['saldo']) + float(r['importo'])
+    query('UPDATE utenti SET saldo=%s WHERE id=%s', (nuovo_saldo, u['id']))
     query(
-        '''UPDATE ricariche SET stato = %s, id_utente_riceve = %s, data_completata = NOW()
-           WHERE id = %s''',
-        ('COMPLETATA', utente['id'], r['id'])
+        """UPDATE ricariche SET stato='COMPLETATA', id_utente_riceve=%s, data_completata=NOW()
+           WHERE id=%s""",
+        (u['id'], r['id'])
     )
     return jsonify({'success': True, 'importo': float(r['importo']), 'nuovo_saldo': nuovo_saldo})
 
 
 # ============================================================
-# Avvio
+# Gestione errori
 # ============================================================
+
+@app.errorhandler(403)
+def forbidden(e):
+    return render_template('errore.html', codice=403,
+                           messaggio='Accesso negato: questa pagina e riservata agli amministratori'), 403
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('errore.html', codice=404,
+                           messaggio='Pagina non trovata'), 404
+
 
 if __name__ == '__main__':
     ip = get_local_ip()
     print('=' * 50)
-    print('POS IoT - Webserver Flask')
+    print('POS IoT - Webserver Flask (privacy mode)')
     print('=' * 50)
     print(f'Indirizzo: http://{ip}:5000')
-    print('Login esercente: admin / admin123')
+    print('Admin:     admin / admin123')
+    print('Esercente: mario / mario123')
     print('=' * 50)
     app.run(host='0.0.0.0', port=5000, debug=True)

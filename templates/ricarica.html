@@ -3,18 +3,19 @@
 
 {% block content %}
 <h1>Nuova ricarica</h1>
-<p class="subtitle">Genera un QR code che il cliente potra scannerizzare con l'app</p>
+<p class="subtitle">Inserisci l'importo: verra generato un QR code che il cliente puo scansionare con la sua app per ricevere la ricarica sul proprio conto</p>
 
-<div class="card">
+<div class="card" style="max-width: 480px;">
     {% if errore %}
         <div class="alert error">{{ errore }}</div>
     {% endif %}
     <form method="POST">
         <label>
             Importo da ricaricare (EUR)
-            <input type="number" name="importo" required step="0.01" min="0.01" autofocus placeholder="es. 50.00">
+            <input type="number" name="importo" required step="0.01" min="0.01" autofocus placeholder="50.00">
         </label>
-        <button type="submit" class="btn primary">Genera QR code</button>
+        <p class="hint" style="text-align: left;">Il QR sara valido per 5 minuti dalla generazione</p>
+        <button type="submit" class="btn primary big">Genera QR code</button>
     </form>
 </div>
 {% endblock %}

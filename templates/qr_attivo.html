@@ -1,21 +1,31 @@
 {% extends "base.html" %}
-{% block title %}QR code attivo - POS IoT{% endblock %}
+{% block title %}QR ricarica - POS IoT{% endblock %}
 
 {% block content %}
-<h1>QR code generato</h1>
-<p class="subtitle">Il cliente puo scannerizzarlo per ricevere la ricarica</p>
+<div class="page-header">
+    <div>
+        <h1>QR code attivo</h1>
+        <p class="subtitle">Il cliente puo scansionarlo per ricevere la ricarica. L'identita non sara mostrata.</p>
+    </div>
+</div>
 
 <div class="qr-container">
     <div class="qr-info">
         <div class="qr-importo">{{ "%.2f"|format(ricarica.importo) }} EUR</div>
         <div class="qr-meta">
-            <p><strong>Validita:</strong> 5 minuti</p>
-            <p><strong>Stato:</strong> <span class="badge pending">{{ ricarica.stato }}</span></p>
-            <p class="mono small">{{ url_pagamento }}</p>
+            <p><strong>Validita:</strong> 5 minuti dalla generazione</p>
+            <p><strong>Stato:</strong> <span class="badge pending" id="badge-stato">{{ ricarica.stato }}</span></p>
+            <p class="small">URL: {{ url_pagamento }}</p>
         </div>
+
+        <div id="stato-live">In attesa di scansione...</div>
+
         <div class="qr-actions">
+            <form method="POST" action="{{ url_for('qr_annulla', token=token) }}" style="display: inline;" id="form-annulla">
+                <button type="submit" class="btn danger">Annulla QR</button>
+            </form>
             <a href="{{ url_for('ricarica') }}" class="btn primary">Nuova ricarica</a>
-            <a href="{{ url_for('dashboard') }}" class="btn">Torna alla dashboard</a>
+            <a href="{{ url_for('dashboard') }}" class="btn">Dashboard</a>
         </div>
     </div>
     <div class="qr-image">
@@ -24,7 +34,36 @@
 </div>
 
 <script>
-    // Ricarica la pagina ogni 5 secondi per vedere lo stato aggiornato
-    setTimeout(function() { location.reload(); }, 5000);
+    // Polling stato QR ogni 2 secondi senza esporre l'identita del cliente
+    const token = "{{ token }}";
+    const badge = document.getElementById('badge-stato');
+    const statoLive = document.getElementById('stato-live');
+    const formAnnulla = document.getElementById('form-annulla');
+
+    async function controllaStato() {
+        try {
+            const resp = await fetch('/qr/' + token + '/stato');
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            if (data.stato === 'COMPLETATA') {
+                badge.className = 'badge success';
+                badge.textContent = data.stato;
+                statoLive.className = 'completata';
+                statoLive.textContent = 'Ricarica completata alle ' + data.data_completata;
+                formAnnulla.style.display = 'none';
+                clearInterval(intervallo);
+            } else if (data.stato === 'ANNULLATA' || data.stato === 'SCADUTA') {
+                badge.className = 'badge error';
+                badge.textContent = data.stato;
+                statoLive.className = data.stato.toLowerCase();
+                statoLive.textContent = 'QR ' + data.stato.toLowerCase();
+                formAnnulla.style.display = 'none';
+                clearInterval(intervallo);
+            }
+        } catch (e) {}
+    }
+    const intervallo = setInterval(controllaStato, 2000);
+    controllaStato();
 </script>
 {% endblock %}

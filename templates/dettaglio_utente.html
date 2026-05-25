@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ utente.nome }} - POS IoT{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('utenti') }}" class="btn sm" style="margin-bottom: 16px;">&larr; Torna agli utenti</a>
+
+<div class="profile-hero">
+    <h2>{{ utente.nome }}</h2>
+    <div class="uid">UID carta: {{ utente.uid }}</div>
+    <div class="saldo">{{ "%.2f"|format(utente.saldo) }} EUR</div>
+</div>
+
+<div class="card">
+    <h2>Modifica saldo manualmente</h2>
+    <p class="subtitle">Usa numeri positivi per accreditare, negativi per scalare. Esempi: <strong>+50</strong>, <strong>-10.50</strong></p>
+    <form method="POST" action="{{ url_for('modifica_saldo', id_utente=utente.id) }}" class="inline-form">
+        <input type="number" name="delta" step="0.01" required placeholder="Importo (+/-)" autofocus>
+        <button type="submit" class="btn primary">Applica</button>
+    </form>
+</div>
+
+<div class="profile-grid">
+    <div>
+        <h2>Pagamenti POS</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Importo</th>
+                    <th>Esito</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in trans %}
+                <tr>
+                    <td>{{ t.data_ora.strftime('%d/%m %H:%M') }}</td>
+                    <td class="amount">{{ "%.2f"|format(t.importo) }} EUR</td>
+                    <td>
+                        {% if t.esito == 'APPROVATA' %}
+                            <span class="badge success">{{ t.esito }}</span>
+                        {% else %}
+                            <span class="badge error">{{ t.esito }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty">Nessun pagamento</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div>
+        <h2>Ricariche ricevute</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Negozio</th>
+                    <th>Importo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in ricariche %}
+                <tr>
+                    <td>{{ r.data_completata.strftime('%d/%m %H:%M') }}</td>
+                    <td>{{ r.nome_negozio }}</td>
+                    <td class="amount">+{{ "%.2f"|format(r.importo) }} EUR</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty">Nessuna ricarica</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

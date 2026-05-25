@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Errore {{ codice }} - POS IoT{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 60px auto; text-align: center;">
+    <h1 style="font-size: 72px; color: var(--danger); margin-bottom: 8px;">{{ codice }}</h1>
+    <p style="font-size: 16px; margin-bottom: 24px; color: var(--text-muted);">{{ messaggio }}</p>
+    <a href="{{ url_for('dashboard') }}" class="btn primary">Torna alla dashboard</a>
+</div>
+{% endblock %}

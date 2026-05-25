@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-# Inizializza il database PostgreSQL con tutte le tabelle
-# Eseguire una sola volta, ricrea tutto da zero
+# Inizializza il database con tabelle e ruoli per privacy
 
 import hashlib
 import psycopg2
@@ -12,21 +11,18 @@ DB_CONFIG = {
     'password': 'password'
 }
 
-def hash_pin(pin):
-    # Hash sha256 usato per PIN clienti e password esercenti
-    return hashlib.sha256(pin.encode()).hexdigest()
+def hash_pwd(testo):
+    return hashlib.sha256(testo.encode()).hexdigest()
 
 def inizializza():
     conn = psycopg2.connect(**DB_CONFIG)
     cur  = conn.cursor()
 
-    # Pulisco tutto in ordine inverso per le foreign key
     cur.execute('DROP TABLE IF EXISTS ricariche')
     cur.execute('DROP TABLE IF EXISTS transazioni')
     cur.execute('DROP TABLE IF EXISTS esercenti')
     cur.execute('DROP TABLE IF EXISTS utenti')
 
-    # Tabella utenti (clienti con carta NFC)
     cur.execute('''
         CREATE TABLE utenti (
             id       SERIAL PRIMARY KEY,
@@ -37,17 +33,17 @@ def inizializza():
         )
     ''')
 
-    # Tabella esercenti (chi gestisce il POS dal sito web)
+    # Nuovo campo ruolo: admin vede di piu, esercente vede solo i suoi dati
     cur.execute('''
         CREATE TABLE esercenti (
             id            SERIAL PRIMARY KEY,
             username      TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
-            nome_negozio  TEXT NOT NULL
+            nome_negozio  TEXT NOT NULL,
+            ruolo         TEXT NOT NULL DEFAULT 'esercente'
         )
     ''')
 
-    # Tabella transazioni (pagamenti effettuati dal POS fisico)
     cur.execute('''
         CREATE TABLE transazioni (
             id           SERIAL PRIMARY KEY,
@@ -61,7 +57,6 @@ def inizializza():
         )
     ''')
 
-    # Tabella ricariche (ricariche tramite QR code dell'esercente)
     cur.execute('''
         CREATE TABLE ricariche (
             id                SERIAL PRIMARY KEY,
@@ -76,7 +71,6 @@ def inizializza():
         )
     ''')
 
-    # Utenti iniziali (clienti)
     utenti = [
         ('584195345601', 'Mario Rossi',  '1234', 150.75),
         ('111222333444', 'Luca Bianchi', '5678',  50.00),
@@ -85,27 +79,28 @@ def inizializza():
     for uid, nome, pin, saldo in utenti:
         cur.execute(
             'INSERT INTO utenti (uid, nome, pin_hash, saldo) VALUES (%s, %s, %s, %s)',
-            (uid, nome, hash_pin(pin), saldo)
+            (uid, nome, hash_pwd(pin), saldo)
         )
         print('Utente inserito: ' + nome)
 
-    # Esercenti iniziali (per testare il login)
+    # Un admin (vede statistiche generali, lista utenti anonimizzata, transazioni anonimizzate)
+    # Un esercente normale (vede solo le proprie ricariche)
     esercenti = [
-        ('admin',   'admin123', 'Negozio Principale'),
-        ('mario',   'mario123', 'Bar Mario'),
+        ('admin', 'admin123', 'Amministratore', 'admin'),
+        ('mario', 'mario123', 'Bar Mario',      'esercente'),
+        ('luca',  'luca123',  'Pizzeria Luca',  'esercente'),
     ]
-    for username, password, nome_negozio in esercenti:
+    for username, password, nome_negozio, ruolo in esercenti:
         cur.execute(
-            'INSERT INTO esercenti (username, password_hash, nome_negozio) VALUES (%s, %s, %s)',
-            (username, hash_pin(password), nome_negozio)
+            'INSERT INTO esercenti (username, password_hash, nome_negozio, ruolo) VALUES (%s, %s, %s, %s)',
+            (username, hash_pwd(password), nome_negozio, ruolo)
         )
-        print('Esercente inserito: ' + username + ' (' + nome_negozio + ')')
+        print(f'Esercente inserito: {username} ({ruolo})')
 
     conn.commit()
     cur.close()
     conn.close()
-    print()
-    print('Database pronto.')
+    print('\nDatabase pronto.')
 
 if __name__ == '__main__':
     inizializza()

@@ -13,15 +13,21 @@
             <div class="logo">P</div>
             <span>POS IoT</span>
             <span style="color: var(--text-muted); font-weight: 400; font-size: 14px;">
-                · {{ session.esercente_nome }}
+                · {{ esercente_nome }}
+                {% if ruolo == 'admin' %}
+                    <span class="badge muted" style="margin-left: 6px;">ADMIN</span>
+                {% endif %}
             </span>
         </div>
         <div class="nav-links">
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
-            <a href="{{ url_for('utenti') }}">Utenti</a>
             <a href="{{ url_for('ricarica') }}">Ricarica</a>
             <a href="{{ url_for('ricariche') }}">Storico QR</a>
-            <a href="{{ url_for('transazioni') }}">Transazioni</a>
+            <a href="{{ url_for('nuovo_utente') }}">Registra utente</a>
+            {% if ruolo == 'admin' %}
+                <a href="{{ url_for('utenti') }}">Utenti</a>
+                <a href="{{ url_for('transazioni') }}">Transazioni</a>
+            {% endif %}
             <a href="{{ url_for('logout') }}" class="logout">Esci</a>
         </div>
     </nav>

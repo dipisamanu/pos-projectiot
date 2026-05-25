@@ -1,27 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Transazioni - POS IoT{% endblock %}
+{% block title %}Log transazioni - POS IoT{% endblock %}
 
 {% block content %}
-<h1>Storico transazioni</h1>
-<p class="subtitle">Ultime 100 transazioni dal POS fisico</p>
+<h1>Log transazioni POS</h1>
+<p class="subtitle">Dati anonimizzati: solo ID, data, importo ed esito. Nessuna info sull'identita del cliente.</p>
 
 <table class="data-table">
     <thead>
         <tr>
+            <th>ID</th>
             <th>Data e ora</th>
-            <th>Cliente</th>
             <th>Importo</th>
-            <th>Saldo dopo</th>
             <th>Esito</th>
         </tr>
     </thead>
     <tbody>
         {% for t in transazioni %}
         <tr>
+            <td class="mono">#{{ "%05d"|format(t.id) }}</td>
             <td>{{ t.data_ora.strftime('%d/%m/%Y %H:%M:%S') }}</td>
-            <td>{{ t.nome_utente }}</td>
             <td class="amount">{{ "%.2f"|format(t.importo) }} EUR</td>
-            <td class="amount">{{ "%.2f"|format(t.saldo_dopo) }} EUR</td>
             <td>
                 {% if t.esito == 'APPROVATA' %}
                     <span class="badge success">{{ t.esito }}</span>
@@ -31,7 +29,7 @@
             </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="empty">Nessuna transazione</td></tr>
+        <tr><td colspan="4" class="empty">Nessuna transazione</td></tr>
         {% endfor %}
     </tbody>
 </table>

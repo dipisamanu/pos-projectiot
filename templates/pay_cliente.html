@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ricarica - POS IoT</title>
+    <title>Ricarica conto</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="pay-page">
@@ -14,28 +14,36 @@
             <div class="pay-success">
                 <h2>Ricarica completata</h2>
                 <p>Cliente: <strong>{{ nome_utente }}</strong></p>
-                <p>Accreditato: <strong>{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
+                <p>Accreditato: <strong>+{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
                 <p>Nuovo saldo: <strong>{{ "%.2f"|format(nuovo_saldo) }} EUR</strong></p>
             </div>
         {% elif errore %}
             <div class="alert error">{{ errore }}</div>
             {% if ricarica %}
-                <p>Importo: {{ "%.2f"|format(ricarica.importo) }} EUR</p>
-                <p>Negozio: {{ ricarica.nome_negozio }}</p>
+                <div class="pay-info">
+                    <p>Importo: <strong>{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
+                    <p>Negozio: <strong>{{ ricarica.nome_negozio }}</strong></p>
+                </div>
             {% endif %}
         {% else %}
             <div class="pay-info">
-                <p>Negozio: <strong>{{ ricarica.nome_negozio }}</strong></p>
-                <p>Importo da accreditare: <strong>{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
+                <p>Negozio</p>
+                <p><strong>{{ ricarica.nome_negozio }}</strong></p>
+            </div>
+            <div class="pay-info" style="background: #eef2ff; border-color: #c7d2fe;">
+                <p>Importo da accreditare</p>
+                <p style="font-size: 28px; color: var(--primary); font-weight: 700;">
+                    +{{ "%.2f"|format(ricarica.importo) }} EUR
+                </p>
             </div>
             <form method="POST">
                 <label>
                     UID della tua carta
-                    <input type="text" name="uid" required autofocus inputmode="numeric">
+                    <input type="text" name="uid" required autofocus inputmode="numeric" placeholder="es. 584195345601">
                 </label>
                 <label>
                     PIN
-                    <input type="password" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric">
+                    <input type="password" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="••••">
                 </label>
                 <button type="submit" class="btn primary big">Conferma ricarica</button>
             </form>
