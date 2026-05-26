@@ -1,40 +1,79 @@
 # -*- coding: utf-8 -*-
-# Inizializza il database con tabelle e ruoli per privacy
+"""
+Inizializza database POS IoT
+- Tabelle: utenti, esercenti, transazioni, ricariche, bonifici,
+  refresh_tokens, revoked_access_tokens
+- Password con Argon2 (sicuro)
+- Foreign key id_utente per integrita referenziale
+"""
 
 import hashlib
+import os
+from datetime import datetime, timedelta
+from decimal import Decimal
+
 import psycopg2
+from argon2 import PasswordHasher
+from dotenv import load_dotenv
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 DB_CONFIG = {
-    'host':     'localhost',
-    'database': 'iot_db',
-    'user':     'admin',
-    'password': 'password'
+    "host":     os.getenv("DB_HOST", "localhost"),
+    "database": os.getenv("DB_NAME", "iot_db"),
+    "user":     os.getenv("DB_USER", "admin"),
+    "password": os.getenv("DB_PASSWORD", ""),
 }
 
-def hash_pwd(testo):
-    return hashlib.sha256(testo.encode()).hexdigest()
+if not DB_CONFIG["password"]:
+    raise RuntimeError("DB_PASSWORD non impostata nel file .env")
+
+CATEGORIE_VALIDE = {
+    "shopping", "transport", "food", "entertainment", "health", "travel",
+    "utilities", "salary", "transfer", "education", "subscriptions", "other"
+}
+
+ph = PasswordHasher()
+
+
+def hash_pin(pin: str) -> str:
+    # PIN della carta NFC: SHA256 (4 cifre, basta)
+    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
+
+
+def hash_password(password: str) -> str:
+    # Password app/esercente: Argon2 (sicuro contro brute force)
+    return ph.hash(password)
+
 
 def inizializza():
     conn = psycopg2.connect(**DB_CONFIG)
-    cur  = conn.cursor()
+    cur = conn.cursor()
 
-    cur.execute('DROP TABLE IF EXISTS ricariche')
-    cur.execute('DROP TABLE IF EXISTS transazioni')
-    cur.execute('DROP TABLE IF EXISTS esercenti')
-    cur.execute('DROP TABLE IF EXISTS utenti')
+    # Pulizia in ordine inverso per le foreign key
+    cur.execute("DROP TABLE IF EXISTS revoked_access_tokens")
+    cur.execute("DROP TABLE IF EXISTS refresh_tokens")
+    cur.execute("DROP TABLE IF EXISTS bonifici")
+    cur.execute("DROP TABLE IF EXISTS ricariche")
+    cur.execute("DROP TABLE IF EXISTS transazioni")
+    cur.execute("DROP TABLE IF EXISTS esercenti")
+    cur.execute("DROP TABLE IF EXISTS utenti")
 
-    cur.execute('''
+    cur.execute("""
         CREATE TABLE utenti (
-            id       SERIAL PRIMARY KEY,
-            uid      TEXT NOT NULL UNIQUE,
-            nome     TEXT NOT NULL,
-            pin_hash TEXT NOT NULL,
-            saldo    NUMERIC(10,2) NOT NULL DEFAULT 0.00
+            id            SERIAL PRIMARY KEY,
+            uid           TEXT NOT NULL UNIQUE,
+            nome          TEXT NOT NULL,
+            pin_hash      TEXT NOT NULL,
+            saldo         NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+            attiva        BOOLEAN NOT NULL DEFAULT TRUE,
+            username      TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL
         )
-    ''')
+    """)
 
-    # Nuovo campo ruolo: admin vede di piu, esercente vede solo i suoi dati
-    cur.execute('''
+    cur.execute("""
         CREATE TABLE esercenti (
             id            SERIAL PRIMARY KEY,
             username      TEXT NOT NULL UNIQUE,
@@ -42,65 +81,142 @@ def inizializza():
             nome_negozio  TEXT NOT NULL,
             ruolo         TEXT NOT NULL DEFAULT 'esercente'
         )
-    ''')
+    """)
 
-    cur.execute('''
+    cur.execute("""
+        CREATE TABLE refresh_tokens (
+            id           SERIAL PRIMARY KEY,
+            user_id      INTEGER NOT NULL REFERENCES utenti(id) ON DELETE CASCADE,
+            token_hash   TEXT NOT NULL UNIQUE,
+            expires_at   TIMESTAMP NOT NULL,
+            revoked      BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+            revoked_at   TIMESTAMP,
+            last_used_at TIMESTAMP
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE revoked_access_tokens (
+            id         SERIAL PRIMARY KEY,
+            jti        TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            revoked_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE transazioni (
             id           SERIAL PRIMARY KEY,
+            id_utente    INTEGER REFERENCES utenti(id),
             uid_carta    TEXT NOT NULL,
             nome_utente  TEXT NOT NULL,
-            importo      NUMERIC(10,2) NOT NULL,
-            saldo_prima  NUMERIC(10,2) NOT NULL,
-            saldo_dopo   NUMERIC(10,2) NOT NULL,
-            esito        TEXT NOT NULL,
+            titolo       TEXT NOT NULL DEFAULT 'Transazione',
+            tipo         TEXT NOT NULL DEFAULT 'expense',
+            categoria    TEXT NOT NULL DEFAULT 'other',
+            importo      NUMERIC(12,2) NOT NULL,
+            saldo_prima  NUMERIC(12,2) NOT NULL,
+            saldo_dopo   NUMERIC(12,2) NOT NULL,
+            esito        TEXT NOT NULL DEFAULT 'APPROVATA',
             data_ora     TIMESTAMP NOT NULL DEFAULT NOW()
         )
-    ''')
+    """)
 
-    cur.execute('''
+    cur.execute("""
         CREATE TABLE ricariche (
             id                SERIAL PRIMARY KEY,
             token             TEXT NOT NULL UNIQUE,
             id_esercente      INTEGER NOT NULL REFERENCES esercenti(id),
-            importo           NUMERIC(10,2) NOT NULL,
+            importo           NUMERIC(12,2) NOT NULL,
             id_utente_riceve  INTEGER REFERENCES utenti(id),
             stato             TEXT NOT NULL DEFAULT 'PENDING',
             data_creazione    TIMESTAMP NOT NULL DEFAULT NOW(),
             data_completata   TIMESTAMP,
             scadenza          TIMESTAMP NOT NULL
         )
-    ''')
+    """)
 
-    utenti = [
-        ('584195345601', 'Mario Rossi',  '1234', 150.75),
-        ('111222333444', 'Luca Bianchi', '5678',  50.00),
-        ('555666777888', 'Anna Verdi',   '0000', 1000.00),
-    ]
-    for uid, nome, pin, saldo in utenti:
-        cur.execute(
-            'INSERT INTO utenti (uid, nome, pin_hash, saldo) VALUES (%s, %s, %s, %s)',
-            (uid, nome, hash_pwd(pin), saldo)
+    cur.execute("""
+        CREATE TABLE bonifici (
+            id                SERIAL PRIMARY KEY,
+            id_utente         INTEGER NOT NULL REFERENCES utenti(id),
+            beneficiario      TEXT NOT NULL,
+            iban_destinatario TEXT NOT NULL,
+            causale           TEXT NOT NULL,
+            importo           NUMERIC(12,2) NOT NULL,
+            stato             TEXT NOT NULL DEFAULT 'COMPLETATO',
+            creato_il         TIMESTAMP NOT NULL DEFAULT NOW()
         )
-        print('Utente inserito: ' + nome)
+    """)
 
-    # Un admin (vede statistiche generali, lista utenti anonimizzata, transazioni anonimizzate)
-    # Un esercente normale (vede solo le proprie ricariche)
+    # Seed utenti (clienti app)
+    utenti_seed = [
+        ("584195345601", "Mario Rossi",  "1234", Decimal("2450.00"), "mario.rossi",  "password123"),
+        ("111222333444", "Luca Bianchi", "5678", Decimal("980.20"),  "luca.bianchi", "password123"),
+        ("555666777888", "Anna Verdi",   "0000", Decimal("5270.55"), "anna.verdi",   "password123"),
+    ]
+    for uid, nome, pin, saldo, username, pwd in utenti_seed:
+        cur.execute(
+            """INSERT INTO utenti (uid, nome, pin_hash, saldo, attiva, username, password_hash)
+               VALUES (%s, %s, %s, %s, TRUE, %s, %s)""",
+            (uid, nome, hash_pin(pin), saldo, username, hash_password(pwd)),
+        )
+        print(f"Utente inserito: {nome} (login app: {username} / password123)")
+
+    # Seed esercenti (login sito)
     esercenti = [
-        ('admin', 'admin123', 'Amministratore', 'admin'),
-        ('mario', 'mario123', 'Bar Mario',      'esercente'),
-        ('luca',  'luca123',  'Pizzeria Luca',  'esercente'),
+        ("admin", "admin123", "Amministratore", "admin"),
+        ("mario", "mario123", "Bar Mario",      "esercente"),
+        ("luca",  "luca123",  "Pizzeria Luca",  "esercente"),
     ]
     for username, password, nome_negozio, ruolo in esercenti:
         cur.execute(
-            'INSERT INTO esercenti (username, password_hash, nome_negozio, ruolo) VALUES (%s, %s, %s, %s)',
-            (username, hash_pwd(password), nome_negozio, ruolo)
+            """INSERT INTO esercenti (username, password_hash, nome_negozio, ruolo)
+               VALUES (%s, %s, %s, %s)""",
+            (username, hash_password(password), nome_negozio, ruolo),
         )
-        print(f'Esercente inserito: {username} ({ruolo})')
+        print(f"Esercente inserito: {username} ({ruolo})")
+
+    # Transazioni demo per Mario Rossi (popolano la dashboard dell'app)
+    cur.execute("SELECT id, uid, nome, saldo FROM utenti WHERE username='mario.rossi'")
+    mario = cur.fetchone()
+    if mario:
+        id_u, uid_u, nome_u, saldo = mario
+        saldo = Decimal(saldo)
+        demo = [
+            ("Accredito Stipendio Maggio", "income",  "salary",        Decimal("2620.00")),
+            ("LIDL",                       "expense", "food",          Decimal("64.30")),
+            ("Benzina Eni",                "expense", "transport",     Decimal("50.00")),
+            ("Netflix Monthly",            "expense", "subscriptions", Decimal("17.99")),
+            ("Amazon Shopping",            "expense", "shopping",      Decimal("124.50")),
+            ("Cena Sushi",                 "expense", "food",          Decimal("45.00")),
+            ("Rimborso Spese",             "income",  "transfer",      Decimal("120.00")),
+            ("Palestra",                   "expense", "health",        Decimal("55.00")),
+            ("Cinema UCI",                 "expense", "entertainment", Decimal("12.50")),
+            ("Bolletta Enel",              "expense", "utilities",     Decimal("89.20")),
+            ("Corso Udemy",                "expense", "education",     Decimal("19.99")),
+            ("Volo Ryanair",               "expense", "travel",        Decimal("85.00")),
+        ]
+        for i, (titolo, tipo, categoria, importo) in enumerate(demo):
+            saldo_prima = saldo
+            saldo = saldo + importo if tipo == "income" else saldo - importo
+            cur.execute(
+                """INSERT INTO transazioni
+                   (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
+                    importo, saldo_prima, saldo_dopo, esito, data_ora)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'APPROVATA',%s)""",
+                (id_u, uid_u, nome_u, titolo, tipo, categoria,
+                 importo, saldo_prima, saldo, datetime.now() - timedelta(days=i * 2)),
+            )
+        # Aggiorna saldo finale dopo le transazioni demo
+        cur.execute("UPDATE utenti SET saldo=%s WHERE id=%s", (saldo, id_u))
+        print(f"Inserite {len(demo)} transazioni demo per Mario Rossi")
 
     conn.commit()
     cur.close()
     conn.close()
-    print('\nDatabase pronto.')
+    print("\nDatabase inizializzato correttamente.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     inizializza()
