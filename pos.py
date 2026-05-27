@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 POS IoT - Terminale fisico di pagamento
-Due modalità:
-  1. Portale: esercente crea richiesta sul sito → pos.py la riceve → cliente avvicina carta
-  2. Manuale: cliente avvicina carta → inserisce importo → inserisce PIN
+- Idle silenzioso: aspetta richieste dal portale web
+- Si attiva solo quando un esercente crea una richiesta di pagamento
+- Premi qualsiasi tasto in idle per spegnere
 """
 
 import hashlib
 import os
 import sys
 import time
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 import psycopg2
@@ -26,7 +25,6 @@ from PIL import ImageFont
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# Sopprime AUTH ERROR mfrc522
 _stderr_orig = sys.stderr
 sys.stderr = open(os.devnull, "w")
 
@@ -44,7 +42,8 @@ if not DB_CONFIG["password"]:
     sys.stderr = _stderr_orig
     raise RuntimeError("DB_PASSWORD non impostata nel file .env")
 
-TIMEOUT_TASTO = 30  # secondi inattività tastierino
+TIMEOUT_TASTO   = 30
+POLL_INTERVALLO = 2
 
 # ============================================================
 # Hardware
@@ -52,7 +51,7 @@ TIMEOUT_TASTO = 30  # secondi inattività tastierino
 
 serial_i2c = i2c(port=1, address=0x3C)
 device     = sh1106(serial_i2c)
-reader     = SimpleMFRC522()  # forza GPIO BOARD mode
+reader     = SimpleMFRC522()
 
 KEYPAD   = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['*','0','#']]
 ROW_PINS = [38, 36, 32, 35]
@@ -72,8 +71,10 @@ for p in [PIN_R, PIN_G, PIN_B]:
     GPIO.output(p, GPIO.LOW)
 
 try:
-    font_grande = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
-    font_medio  = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+    font_grande = ImageFont.truetype(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+    font_medio  = ImageFont.truetype(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
 except Exception:
     font_grande = ImageFont.load_default()
     font_medio  = ImageFont.load_default()
@@ -87,17 +88,17 @@ def led(r=0, g=0, b=0):
     GPIO.output(PIN_G, g)
     GPIO.output(PIN_B, b)
 
-def led_off():     led(0, 0, 0)
-def led_blu():     led(0, 0, 1)
-def led_verde():   led(0, 1, 0)
-def led_rosso():   led(1, 0, 0)
-def led_giallo():  led(1, 1, 0)
-def led_viola():   led(1, 0, 1)
+def led_off():    led(0, 0, 0)
+def led_blu():    led(0, 0, 1)
+def led_verde():  led(0, 1, 0)
+def led_rosso():  led(1, 0, 0)
+def led_giallo(): led(1, 1, 0)
+def led_viola():  led(1, 0, 1)
 
 def led_blink(r, g, b, n=4, t=0.2):
     for _ in range(n):
         led(r, g, b); time.sleep(t)
-        led_off();     time.sleep(t)
+        led_off();    time.sleep(t)
 
 # ============================================================
 # Display OLED
@@ -110,7 +111,7 @@ def mostra(r1, r2='', wait=0):
         draw.text((x1, 8), r1, font=font_grande, fill='white')
         if r2:
             bb2 = draw.textbbox((0, 0), r2, font=font_medio)
-            x2 = max(0, (128 - (bb2[2] - bb2[0])) // 2)
+            x2  = max(0, (128 - (bb2[2] - bb2[0])) // 2)
             draw.text((x2, 38), r2, font=font_medio, fill='white')
     if wait > 0:
         time.sleep(wait)
@@ -132,34 +133,6 @@ def leggi_tasto():
         GPIO.output(rp, GPIO.HIGH)
     return None
 
-def inserisci_importo():
-    s = ''
-    dec = False
-    led_giallo()
-    mostra('Importo:', '0 EUR')
-    last = time.time()
-    while True:
-        t = leggi_tasto()
-        if t is None:
-            if time.time() - last > TIMEOUT_TASTO:
-                return None
-            time.sleep(0.05)
-            continue
-        last = time.time()
-        if t == '#':
-            if not s or s == '.':
-                return None
-            try:
-                return Decimal(s)
-            except (InvalidOperation, ValueError):
-                return None
-        elif t == '*':
-            if not dec and s:
-                s += '.'; dec = True
-        elif t.isdigit() and len(s) < 8:
-            s += t
-        mostra('Importo:', (s or '0') + ' EUR')
-
 def inserisci_pin():
     p = ''
     led_giallo()
@@ -173,23 +146,18 @@ def inserisci_pin():
             time.sleep(0.05)
             continue
         last = time.time()
-        if t.isdigit():    p += t
-        elif t == '*':     p = p[:-1]
-        elif t == '#':     return None
+        if t.isdigit():  p += t
+        elif t == '*':   p = p[:-1]
+        elif t == '#':   return None
         mostra('PIN:', '*' * len(p) + '_' * (4 - len(p)))
     time.sleep(0.3)
     return p
 
 # ============================================================
-# NFC - lettura non bloccante
+# NFC con timeout e annullamento da tastierino
 # ============================================================
 
 def leggi_carta_timeout(secondi=60):
-    """
-    Aspetta una carta NFC per al massimo `secondi`.
-    Premi # sul tastierino per annullare.
-    Ritorna uid o None.
-    """
     fine = time.time() + secondi
     while time.time() < fine:
         uid, _ = reader.read_no_block()
@@ -204,7 +172,7 @@ def leggi_carta_timeout(secondi=60):
     return None
 
 # ============================================================
-# DB helpers
+# DB
 # ============================================================
 
 def hash_pin(pin):
@@ -214,7 +182,9 @@ def cerca_utente(uid):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id, uid, nome, saldo, attiva FROM utenti WHERE uid=%s", (str(uid),))
+        cur.execute(
+            "SELECT id, uid, nome, saldo, attiva FROM utenti WHERE uid=%s",
+            (str(uid),))
         u = cur.fetchone()
         cur.close(); conn.close()
         return dict(u) if u else None
@@ -222,7 +192,6 @@ def cerca_utente(uid):
         return None
 
 def cerca_richiesta_pendente():
-    """Ritorna la prima richiesta PENDING non scaduta (FIFO)."""
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -240,32 +209,26 @@ def cerca_richiesta_pendente():
     except Exception:
         return None
 
-def aggiorna_stato_richiesta(id_richiesta, stato):
+def aggiorna_stato_richiesta(id_r, stato):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur  = conn.cursor()
         cur.execute(
             "UPDATE richieste_pagamento SET stato=%s WHERE id=%s",
-            (stato, id_richiesta)
-        )
+            (stato, id_r))
         conn.commit(); cur.close(); conn.close()
     except Exception:
         pass
 
 def esegui_pagamento(uid, pin, importo, titolo='Pagamento POS', id_richiesta=None):
-    """
-    Pagamento atomico con FOR UPDATE.
-    Se id_richiesta è fornito, aggiorna la richiesta nella stessa transazione.
-    Ritorna (esito, nuovo_saldo|None)
-    """
     conn = psycopg2.connect(**DB_CONFIG)
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cur.execute(
             "SELECT id, uid, nome, saldo, attiva, pin_hash FROM utenti WHERE uid=%s FOR UPDATE",
-            (str(uid),)
-        )
+            (str(uid),))
         u = cur.fetchone()
+
         if not u:
             conn.rollback()
             return 'NEGATA_CARTA', None
@@ -277,9 +240,9 @@ def esegui_pagamento(uid, pin, importo, titolo='Pagamento POS', id_richiesta=Non
                 """INSERT INTO transazioni
                    (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                     importo, saldo_prima, saldo_dopo, esito)
-                   VALUES (%s,%s,%s,'Tentativo PIN errato','expense','other',%s,%s,%s,'NEGATA_PIN')""",
-                (u['id'], u['uid'], u['nome'], importo, u['saldo'], u['saldo'])
-            )
+                   VALUES (%s,%s,%s,'Tentativo PIN errato','expense','other',
+                           %s,%s,%s,'NEGATA_PIN')""",
+                (u['id'], u['uid'], u['nome'], importo, u['saldo'], u['saldo']))
             conn.commit()
             return 'NEGATA_PIN', None
 
@@ -290,13 +253,12 @@ def esegui_pagamento(uid, pin, importo, titolo='Pagamento POS', id_richiesta=Non
                    (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                     importo, saldo_prima, saldo_dopo, esito)
                    VALUES (%s,%s,%s,%s,'expense','other',%s,%s,%s,'NEGATA_FONDI')""",
-                (u['id'], u['uid'], u['nome'], titolo, importo, saldo_prima, saldo_prima)
-            )
+                (u['id'], u['uid'], u['nome'], titolo,
+                 importo, saldo_prima, saldo_prima))
             if id_richiesta:
                 cur.execute(
                     "UPDATE richieste_pagamento SET stato='NEGATA' WHERE id=%s",
-                    (id_richiesta,)
-                )
+                    (id_richiesta,))
             conn.commit()
             return 'NEGATA_FONDI', None
 
@@ -307,84 +269,75 @@ def esegui_pagamento(uid, pin, importo, titolo='Pagamento POS', id_richiesta=Non
                (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                 importo, saldo_prima, saldo_dopo, esito)
                VALUES (%s,%s,%s,%s,'expense','other',%s,%s,%s,'APPROVATA')""",
-            (u['id'], u['uid'], u['nome'], titolo, importo, saldo_prima, saldo_dopo)
-        )
+            (u['id'], u['uid'], u['nome'], titolo,
+             importo, saldo_prima, saldo_dopo))
         if id_richiesta:
             cur.execute(
                 """UPDATE richieste_pagamento
                    SET stato='COMPLETATA', id_utente_paga=%s, data_completata=NOW()
                    WHERE id=%s""",
-                (u['id'], id_richiesta)
-            )
+                (u['id'], id_richiesta))
         conn.commit()
         return 'APPROVATA', saldo_dopo
-    except Exception as e:
+    except Exception:
         conn.rollback()
         return 'ERRORE', None
     finally:
         cur.close(); conn.close()
 
 # ============================================================
-# Flusso: richiesta dal portale web
+# Gestione richiesta dal portale
 # ============================================================
 
 def gestisci_richiesta(richiesta):
-    importo   = Decimal(str(richiesta['importo']))
-    descr     = richiesta['descrizione'][:16]
-    negozio   = richiesta['nome_negozio'][:16]
-    id_rich   = richiesta['id']
+    importo = Decimal(str(richiesta['importo']))
+    descr   = richiesta['descrizione'][:16]
+    negozio = richiesta['nome_negozio'][:16]
+    id_r    = richiesta['id']
 
-    # Mostra richiesta
     led_giallo()
     mostra(f'{importo:.2f} EUR', negozio, 2)
+    aggiorna_stato_richiesta(id_r, 'IN_CORSO')
 
-    # Segna IN_CORSO (impedisce ad altri POS di prenderla)
-    aggiorna_stato_richiesta(id_rich, 'IN_CORSO')
-
-    # Attendi carta (60 secondi, # per annullare)
     led_blu()
-    mostra('Avvicina carta', descr)
     uid = leggi_carta_timeout(60)
 
     if uid is None:
-        # Timeout o annullamento: rimetti PENDING
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_viola()
         mostra('Annullato', '', 2)
         led_off()
         return
 
-    # Identifica utente
     utente = cerca_utente(uid)
     if utente is None:
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_blink(1, 0, 0, n=4)
         mostra('Carta', 'Non valida', 3)
         return
 
     if not utente['attiva']:
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_blink(1, 0, 0, n=6)
         mostra('Carta', 'Bloccata', 3)
         return
 
     mostra('Ciao', utente['nome'], 2)
 
-    # PIN
     pin = inserisci_pin()
     if pin is None:
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_viola()
         mostra('Annullato', '', 2)
         led_off()
         return
 
-    # Pagamento atomico
     led_giallo()
     mostra('Elaboro...', '')
-    titolo = f'{descr} - {negozio}'
     esito, nuovo_saldo = esegui_pagamento(
-        utente['uid'], pin, importo, titolo=titolo, id_richiesta=id_rich
+        utente['uid'], pin, importo,
+        titolo=f'{descr} - {negozio}',
+        id_richiesta=id_r
     )
 
     if esito == 'APPROVATA':
@@ -392,72 +345,18 @@ def gestisci_richiesta(richiesta):
         led_blink(0, 1, 0, n=6)
         time.sleep(1)
     elif esito == 'NEGATA_PIN':
-        # Rimetti PENDING: il cliente può riprovare
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_blink(1, 0, 0, n=5)
         mostra('PIN Errato', 'Riprova', 3)
     elif esito == 'NEGATA_FONDI':
-        # La richiesta è già segnata NEGATA da esegui_pagamento
         led_blink(1, 0, 0, n=5)
         mostra('Fondi', 'Insufficienti', 3)
     elif esito == 'NEGATA_BLOCCATA':
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_blink(1, 0, 0, n=6)
         mostra('Carta', 'Bloccata', 3)
     else:
-        aggiorna_stato_richiesta(id_rich, 'PENDING')
-        led_blink(1, 0, 0, n=3)
-        mostra('Errore DB', 'Riprova', 3)
-
-# ============================================================
-# Flusso: pagamento manuale (fallback se nessuna richiesta)
-# ============================================================
-
-def gestisci_manuale(uid):
-    utente = cerca_utente(uid)
-    if utente is None:
-        led_blink(1, 0, 0, n=4)
-        mostra('Carta', 'Non Valida', 3)
-        return
-    if not utente['attiva']:
-        led_blink(1, 0, 0, n=6)
-        mostra('Carta', 'Bloccata', 3)
-        return
-
-    mostra('Ciao', utente['nome'], 2)
-
-    importo = inserisci_importo()
-    if importo is None or importo <= 0:
-        led_viola()
-        mostra('Annullato', '', 2)
-        led_off()
-        return
-
-    pin = inserisci_pin()
-    if pin is None:
-        led_viola()
-        mostra('Annullato', '', 2)
-        led_off()
-        return
-
-    led_giallo()
-    mostra('Elaboro...', '')
-    esito, nuovo_saldo = esegui_pagamento(utente['uid'], pin, importo)
-
-    if esito == 'APPROVATA':
-        mostra('Approvata', f'{nuovo_saldo:.2f} EUR')
-        led_blink(0, 1, 0, n=6)
-        time.sleep(1)
-    elif esito == 'NEGATA_PIN':
-        led_blink(1, 0, 0, n=5)
-        mostra('PIN Errato', 'Negata', 3)
-    elif esito == 'NEGATA_FONDI':
-        led_blink(1, 0, 0, n=5)
-        mostra('Fondi', 'Insufficienti', 3)
-    elif esito == 'NEGATA_BLOCCATA':
-        led_blink(1, 0, 0, n=6)
-        mostra('Carta', 'Bloccata', 3)
-    else:
+        aggiorna_stato_richiesta(id_r, 'PENDING')
         led_blink(1, 0, 0, n=3)
         mostra('Errore DB', 'Riprova', 3)
 
@@ -469,36 +368,29 @@ def main():
     try:
         led_giallo()
         mostra('POS IoT', 'Avvio...', 2)
+        led_off()
 
         while True:
-            # Controlla richieste pendenti dal portale web
             richiesta = cerca_richiesta_pendente()
 
             if richiesta:
-                # Modalità portale: importo già definito dall'esercente
                 gestisci_richiesta(richiesta)
+                led_off()
+                mostra('POS IoT', 'In attesa...')
             else:
-                # Modalità manuale: mostra attesa, controlla carta per 3s
-                led_blu()
-                mostra('POS Pronto', 'Avvicina carta')
-                fine = time.time() + 3
-                uid_trovato = None
-                while time.time() < fine:
-                    uid, _ = reader.read_no_block()
-                    if uid:
-                        uid_trovato = uid
-                        break
-                    time.sleep(0.3)
-                if uid_trovato:
+                # Idle: display fisso, LED spento
+                # Qualsiasi tasto sul tastierino spegne il POS
+                mostra('POS IoT', 'In attesa...')
+                tasto = leggi_tasto()
+                if tasto is not None:
                     led_giallo()
-                    mostra('Lettura...', '')
-                    time.sleep(0.4)
-                    gestisci_manuale(uid_trovato)
+                    mostra('Spegnimento', '', 1)
+                    break
 
-            time.sleep(0.5)
+            time.sleep(POLL_INTERVALLO)
 
     except KeyboardInterrupt:
-        mostra('Spegnimento', '', 1)
+        pass
     finally:
         led_off()
         try:
