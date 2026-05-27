@@ -45,8 +45,8 @@ if not DB_CONFIG["password"]:
 
 TIMEOUT_TASTO   = 30
 POLL_INTERVALLO = 2
-BUZZER_FREQ     = 2000   # Hz — frequenza di risonanza buzzer piezo
-BUZZER_VOLUME   = 80     # duty cycle % (0-100), aumenta per più volume
+BUZZER_FREQ     = 2250   # Hz — frequenza di risonanza buzzer piezo
+BUZZER_VOLUME   = 90     # duty cycle % (0-100), aumenta per più volume
 
 # ============================================================
 # Hardware
