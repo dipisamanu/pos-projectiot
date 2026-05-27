@@ -16,23 +16,23 @@
     {% if ruolo == 'admin' %}<span class="nav-badge">Admin</span>{% endif %}
   </div>
   <div class="nav-links">
-    <a href="{{ url_for('dashboard') }}">🏠 <span>Dashboard</span></a>
+    <a href="{{ url_for('dashboard') }}"> <span>Dashboard</span></a>
     {% if ruolo == 'admin' %}
-      <a href="{{ url_for('richiesta_pagamento') }}">💳 <span>Richiedi pagamento</span></a>
-      <a href="{{ url_for('pagamenti') }}">📋 <span>Pagamenti</span></a>
-      <a href="{{ url_for('ricarica') }}">⚡ <span>Ricarica QR</span></a>
-      <a href="{{ url_for('ricariche') }}">📂 <span>Storico QR</span></a>
-      <a href="{{ url_for('utenti') }}">👥 <span>Clienti</span></a>
-      <a href="{{ url_for('transazioni') }}">📊 <span>Transazioni</span></a>
-      <a href="{{ url_for('nuovo_utente') }}">➕ <span>Registra cliente</span></a>
+      <a href="{{ url_for('richiesta_pagamento') }}"><span>Richiedi pagamento</span></a>
+      <a href="{{ url_for('pagamenti') }}"><span>Pagamenti</span></a>
+      <a href="{{ url_for('ricarica') }}"><span>Ricarica QR</span></a>
+      <a href="{{ url_for('ricariche') }}"><span>Storico QR</span></a>
+      <a href="{{ url_for('utenti') }}"><span>Clienti</span></a>
+      <a href="{{ url_for('transazioni') }}"><span>Transazioni</span></a>
+      <a href="{{ url_for('nuovo_utente') }}"><span>Registra cliente</span></a>
     {% else %}
-      <a href="{{ url_for('richiesta_pagamento') }}">💳 <span>Richiedi pagamento</span></a>
-      <a href="{{ url_for('pagamenti') }}">📋 <span>Pagamenti</span></a>
-      <a href="{{ url_for('ricarica') }}">⚡ <span>Ricarica QR</span></a>
-      <a href="{{ url_for('ricariche') }}">📂 <span>Storico QR</span></a>
-      <a href="{{ url_for('nuovo_utente') }}">➕ <span>Registra cliente</span></a>
+      <a href="{{ url_for('richiesta_pagamento') }}"><span>Richiedi pagamento</span></a>
+      <a href="{{ url_for('pagamenti') }}"><span>Pagamenti</span></a>
+      <a href="{{ url_for('ricarica') }}"><span>Ricarica QR</span></a>
+      <a href="{{ url_for('ricariche') }}"><span>Storico QR</span></a>
+      <a href="{{ url_for('nuovo_utente') }}"><span>Registra cliente</span></a>
     {% endif %}
-    <a href="{{ url_for('logout') }}" class="nav-logout">🚪 <span>Esci</span></a>
+    <a href="{{ url_for('logout') }}" class="nav-logout"><span>Esci</span></a>
   </div>
 </nav>
 {% endif %}
