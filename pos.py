@@ -3,7 +3,8 @@
 POS IoT - Terminale fisico di pagamento
 - Idle silenzioso: aspetta richieste dal portale web
 - Si attiva solo quando un esercente crea una richiesta di pagamento
-- Premi qualsiasi tasto in idle per spegnere
+- Qualsiasi tasto in idle spegne il POS
+- Buzzer su BOARD pin 16, pilotato con PWM 2000Hz per volume massimo
 """
 
 import hashlib
@@ -44,6 +45,8 @@ if not DB_CONFIG["password"]:
 
 TIMEOUT_TASTO   = 30
 POLL_INTERVALLO = 2
+BUZZER_FREQ     = 2000   # Hz — frequenza di risonanza buzzer piezo
+BUZZER_VOLUME   = 80     # duty cycle % (0-100), aumenta per più volume
 
 # ============================================================
 # Hardware
@@ -53,12 +56,13 @@ serial_i2c = i2c(port=1, address=0x3C)
 device     = sh1106(serial_i2c)
 reader     = SimpleMFRC522()
 
-KEYPAD   = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['*','0','#']]
-ROW_PINS = [38, 36, 32, 35]
-COL_PINS = [33, 31, 29]
-PIN_R    = 15
-PIN_G    = 13
-PIN_B    = 11
+KEYPAD      = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['*','0','#']]
+ROW_PINS    = [38, 36, 32, 35]
+COL_PINS    = [33, 31, 29]
+PIN_R       = 15
+PIN_G       = 13
+PIN_B       = 11
+PIN_BUZZER  = 16   # BOARD pin 16 = GPIO23
 
 GPIO.setwarnings(False)
 for p in ROW_PINS:
@@ -69,6 +73,11 @@ for p in COL_PINS:
 for p in [PIN_R, PIN_G, PIN_B]:
     GPIO.setup(p, GPIO.OUT)
     GPIO.output(p, GPIO.LOW)
+
+# Buzzer su PWM
+GPIO.setup(PIN_BUZZER, GPIO.OUT)
+GPIO.output(PIN_BUZZER, GPIO.LOW)
+_buzz = GPIO.PWM(PIN_BUZZER, BUZZER_FREQ)
 
 try:
     font_grande = ImageFont.truetype(
@@ -90,8 +99,6 @@ def led(r=0, g=0, b=0):
 
 def led_off():    led(0, 0, 0)
 def led_blu():    led(0, 0, 1)
-def led_verde():  led(0, 1, 0)
-def led_rosso():  led(1, 0, 0)
 def led_giallo(): led(1, 1, 0)
 def led_viola():  led(1, 0, 1)
 
@@ -99,6 +106,55 @@ def led_blink(r, g, b, n=4, t=0.2):
     for _ in range(n):
         led(r, g, b); time.sleep(t)
         led_off();    time.sleep(t)
+
+# ============================================================
+# Buzzer (PWM — funziona con buzzer attivi e passivi)
+# ============================================================
+
+def _beep(durata):
+    """Suona per `durata` secondi con PWM."""
+    _buzz.start(BUZZER_VOLUME)
+    time.sleep(durata)
+    _buzz.stop()
+
+def _pausa(durata):
+    time.sleep(durata)
+
+def beep_avvio():
+    # Breve melodia di avvio: corto + lungo
+    _beep(0.1); _pausa(0.06)
+    _beep(0.25)
+
+def beep_richiesta():
+    # Beep singolo: nuova richiesta in arrivo
+    _beep(0.15)
+
+def beep_carta():
+    # Click brevissimo: carta letta
+    _beep(0.06)
+
+def beep_cifra():
+    # Click a ogni cifra PIN premuta
+    _beep(0.04)
+
+def beep_ok():
+    # Due beep brevi: pagamento approvato (suono POS classico)
+    _beep(0.12); _pausa(0.07)
+    _beep(0.12)
+
+def beep_errore():
+    # Beep lungo: operazione negata
+    _beep(0.7)
+
+def beep_warning():
+    # Tre beep rapidi: PIN errato / annullato
+    for _ in range(3):
+        _beep(0.08); _pausa(0.06)
+
+def beep_spegnimento():
+    # Due beep discendenti: spegnimento
+    _beep(0.25); _pausa(0.06)
+    _beep(0.1)
 
 # ============================================================
 # Display OLED
@@ -146,15 +202,20 @@ def inserisci_pin():
             time.sleep(0.05)
             continue
         last = time.time()
-        if t.isdigit():  p += t
-        elif t == '*':   p = p[:-1]
-        elif t == '#':   return None
+        if t.isdigit():
+            p += t
+            beep_cifra()
+        elif t == '*':
+            p = p[:-1]
+            beep_cifra()
+        elif t == '#':
+            return None
         mostra('PIN:', '*' * len(p) + '_' * (4 - len(p)))
     time.sleep(0.3)
     return p
 
 # ============================================================
-# NFC con timeout e annullamento da tastierino
+# NFC con timeout e annullamento
 # ============================================================
 
 def leggi_carta_timeout(secondi=60):
@@ -162,6 +223,7 @@ def leggi_carta_timeout(secondi=60):
     while time.time() < fine:
         uid, _ = reader.read_no_block()
         if uid:
+            beep_carta()
             return uid
         t = leggi_tasto()
         if t == '#':
@@ -295,6 +357,7 @@ def gestisci_richiesta(richiesta):
     negozio = richiesta['nome_negozio'][:16]
     id_r    = richiesta['id']
 
+    beep_richiesta()
     led_giallo()
     mostra(f'{importo:.2f} EUR', negozio, 2)
     aggiorna_stato_richiesta(id_r, 'IN_CORSO')
@@ -304,6 +367,7 @@ def gestisci_richiesta(richiesta):
 
     if uid is None:
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_warning()
         led_viola()
         mostra('Annullato', '', 2)
         led_off()
@@ -312,12 +376,14 @@ def gestisci_richiesta(richiesta):
     utente = cerca_utente(uid)
     if utente is None:
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_errore()
         led_blink(1, 0, 0, n=4)
         mostra('Carta', 'Non valida', 3)
         return
 
     if not utente['attiva']:
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_errore()
         led_blink(1, 0, 0, n=6)
         mostra('Carta', 'Bloccata', 3)
         return
@@ -327,6 +393,7 @@ def gestisci_richiesta(richiesta):
     pin = inserisci_pin()
     if pin is None:
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_warning()
         led_viola()
         mostra('Annullato', '', 2)
         led_off()
@@ -341,22 +408,27 @@ def gestisci_richiesta(richiesta):
     )
 
     if esito == 'APPROVATA':
+        beep_ok()
         mostra('Approvata', f'{nuovo_saldo:.2f} EUR')
         led_blink(0, 1, 0, n=6)
         time.sleep(1)
     elif esito == 'NEGATA_PIN':
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_warning()
         led_blink(1, 0, 0, n=5)
         mostra('PIN Errato', 'Riprova', 3)
     elif esito == 'NEGATA_FONDI':
+        beep_errore()
         led_blink(1, 0, 0, n=5)
         mostra('Fondi', 'Insufficienti', 3)
     elif esito == 'NEGATA_BLOCCATA':
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_errore()
         led_blink(1, 0, 0, n=6)
         mostra('Carta', 'Bloccata', 3)
     else:
         aggiorna_stato_richiesta(id_r, 'PENDING')
+        beep_errore()
         led_blink(1, 0, 0, n=3)
         mostra('Errore DB', 'Riprova', 3)
 
@@ -367,6 +439,7 @@ def gestisci_richiesta(richiesta):
 def main():
     try:
         led_giallo()
+        beep_avvio()
         mostra('POS IoT', 'Avvio...', 2)
         led_off()
 
@@ -378,11 +451,10 @@ def main():
                 led_off()
                 mostra('POS IoT', 'In attesa...')
             else:
-                # Idle: display fisso, LED spento
-                # Qualsiasi tasto sul tastierino spegne il POS
                 mostra('POS IoT', 'In attesa...')
                 tasto = leggi_tasto()
                 if tasto is not None:
+                    beep_spegnimento()
                     led_giallo()
                     mostra('Spegnimento', '', 1)
                     break
@@ -392,6 +464,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        _buzz.stop()
         led_off()
         try:
             device.clear()
