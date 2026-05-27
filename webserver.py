@@ -97,13 +97,6 @@ def _client_ip():
 # ============================================================
 
 app = Flask(__name__)
-
-with app.app_context():
-    try:
-        query("CREATE TABLE IF NOT EXISTS scan_nfc (id SERIAL PRIMARY KEY, stato TEXT NOT NULL DEFAULT 'WAITING', uid TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW(), scadenza TIMESTAMP NOT NULL DEFAULT NOW() + INTERVAL '60 seconds')")
-    except Exception:
-        pass
-
 app.secret_key = FLASK_SECRET_KEY
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -1052,24 +1045,38 @@ def not_found(_e):
 # ============================================================
 
 if __name__ == "__main__":
+    try:
+        query("""CREATE TABLE IF NOT EXISTS scan_nfc (
+            id SERIAL PRIMARY KEY,
+            stato TEXT NOT NULL DEFAULT 'WAITING',
+            uid TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            scadenza TIMESTAMP NOT NULL DEFAULT NOW() + INTERVAL '60 seconds'
+        )""")
+    except Exception:
+        pass
+
     cleanup_expired_tokens()
     ip = get_local_ip()
     host  = os.getenv("HOST", "0.0.0.0")
     port  = env_int("PORT", 5000)
     debug = env_bool("FLASK_DEBUG", False)
+
     print("=" * 60)
-    print("POS IoT - Flask API + Web (sicurezza completa)")
+    print("POS IoT - Flask API + Web")
     print("=" * 60)
     print(f"Sito esercente:  http://{ip}:{port}")
     print(f"API base URL:    http://{ip}:{port}/api")
     print()
-    print("Login esercente:")
-    print("  admin / admin123  (amministratore)")
-    print("  mario / mario123  (esercente)")
+    print("┌─ DBeaver ─────────────────────────┐")
+    print(f"│  Host:     {ip}")
+    print(f"│  Porta:    5432")
+    print(f"│  Database: {DB_CONFIG['database']}")
+    print(f"│  Utente:   {DB_CONFIG['user']}")
+    print( "│  Password: (quella nel .env)")
+    print("└───────────────────────────────────┘")
     print()
-    print("Login app Flutter (clienti):")
-    print("  mario.rossi  / password123")
-    print("  luca.bianchi / password123")
-    print("  anna.verdi   / password123")
+    print("Login esercente: admin/admin123, mario/mario123")
+    print("Login app:       mario.rossi/password123")
     print("=" * 60)
     app.run(host=host, port=port, debug=debug)
