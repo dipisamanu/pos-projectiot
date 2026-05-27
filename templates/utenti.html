@@ -1,41 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Utenti - POS IoT{% endblock %}
-
+{% block title %}Clienti — POS IoT{% endblock %}
 {% block content %}
 <div class="page-header">
-    <div>
-        <h1>Utenti registrati</h1>
-        <p class="subtitle">Lista anonima dei clienti. Nessun dato sensibile e visibile.</p>
-    </div>
-    <a href="{{ url_for('nuovo_utente') }}" class="btn primary">+ Registra utente</a>
+  <div>
+    <h1>Clienti registrati</h1>
+    <p class="subtitle">Lista anonima — nessun dato sensibile visibile.</p>
+  </div>
+  <a href="{{ url_for('nuovo_utente') }}" class="btn primary">➕ Registra cliente</a>
 </div>
 
 <form method="GET" class="search-bar">
-    <input type="text" name="q" value="{{ cerca }}" placeholder="Cerca per nome...">
-    <button type="submit" class="btn primary sm">Cerca</button>
-    {% if cerca %}
-        <a href="{{ url_for('utenti') }}" class="btn sm">Pulisci</a>
-    {% endif %}
+  <input type="text" name="q" value="{{ cerca }}" placeholder="🔍  Cerca per nome...">
+  <button type="submit" class="btn primary sm">Cerca</button>
+  {% if cerca %}<a href="{{ url_for('utenti') }}" class="btn sm">✕ Pulisci</a>{% endif %}
 </form>
 
-<table class="data-table">
+<div class="table-wrapper">
+  <table class="data-table">
     <thead>
-        <tr>
-            <th>ID</th>
-            <th>Nome</th>
-        </tr>
+      <tr><th>#ID</th><th>Nome cliente</th></tr>
     </thead>
     <tbody>
-        {% for u in utenti %}
-        <tr>
-            <td class="mono">#{{ u.id }}</td>
-            <td>{{ u.nome }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="2" class="empty">
-            {% if cerca %}Nessun risultato per "{{ cerca }}"{% else %}Nessun utente registrato{% endif %}
-        </td></tr>
-        {% endfor %}
+      {% for u in utenti %}
+      <tr>
+        <td class="mono">#{{ u.id }}</td>
+        <td>{{ u.nome }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="2" class="empty">
+        {% if cerca %}Nessun risultato per "{{ cerca }}"{% else %}Nessun cliente registrato{% endif %}
+      </td></tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+</div>
 {% endblock %}

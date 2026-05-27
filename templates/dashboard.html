@@ -1,93 +1,121 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - POS IoT{% endblock %}
-
+{% block title %}Dashboard — POS IoT{% endblock %}
 {% block content %}
 
 {% if modalita == 'admin' %}
+<div class="page-header">
+  <div>
     <h1>Pannello amministratore</h1>
-    <p class="subtitle">Statistiche aggregate del sistema. Nessun dato personale e visibile da qui.</p>
+    <p class="subtitle">Vista aggregata del sistema. Nessun dato personale visibile.</p>
+  </div>
+</div>
 
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-num">{{ num_utenti }}</div>
-            <div class="stat-label">Utenti registrati</div>
-        </div>
-        <div class="stat-card success">
-            <div class="stat-num">{{ num_trans }}</div>
-            <div class="stat-label">Transazioni POS</div>
-        </div>
-        <div class="stat-card warning">
-            <div class="stat-num">{{ num_ricar }}</div>
-            <div class="stat-label">Ricariche completate</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-num">{{ num_esercenti }}</div>
-            <div class="stat-label">Esercenti</div>
-        </div>
-    </div>
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-accent">👥</div>
+    <div class="stat-num">{{ num_utenti }}</div>
+    <div class="stat-label">Clienti registrati</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-accent">✅</div>
+    <div class="stat-num">{{ num_trans }}</div>
+    <div class="stat-label">Transazioni POS</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-accent">⚡</div>
+    <div class="stat-num">{{ num_ricar }}</div>
+    <div class="stat-label">Ricariche completate</div>
+  </div>
+  <div class="stat-card info">
+    <div class="stat-accent">🏪</div>
+    <div class="stat-num">{{ num_esercenti }}</div>
+    <div class="stat-label">Esercenti</div>
+  </div>
+</div>
 
-    <h2>Azioni</h2>
-    <div class="action-grid">
-        <a href="{{ url_for('ricarica') }}" class="action-card">
-            <h3>Nuova ricarica</h3>
-            <p>Genera un QR code per ricaricare un cliente</p>
-        </a>
-        <a href="{{ url_for('nuovo_utente') }}" class="action-card">
-            <h3>Registra utente</h3>
-            <p>Aggiungi un nuovo cliente con la sua carta NFC</p>
-        </a>
-        <a href="{{ url_for('utenti') }}" class="action-card">
-            <h3>Lista utenti</h3>
-            <p>Solo nomi anonimizzati, nessun dato sensibile</p>
-        </a>
-        <a href="{{ url_for('transazioni') }}" class="action-card">
-            <h3>Log transazioni</h3>
-            <p>Solo importi e esiti, nessun nome o saldo</p>
-        </a>
-    </div>
+<h2>Operazioni rapide</h2>
+<div class="action-grid">
+  <a href="{{ url_for('richiesta_pagamento') }}" class="action-card">
+    <span class="action-icon">💳</span>
+    <h3>Richiedi pagamento POS</h3>
+    <p>Invia una richiesta di pagamento al terminale fisico</p>
+  </a>
+  <a href="{{ url_for('ricarica') }}" class="action-card">
+    <span class="action-icon">⚡</span>
+    <h3>Nuova ricarica QR</h3>
+    <p>Genera un QR code per ricaricare il conto di un cliente</p>
+  </a>
+  <a href="{{ url_for('utenti') }}" class="action-card">
+    <span class="action-icon">👥</span>
+    <h3>Gestisci clienti</h3>
+    <p>Visualizza e registra nuovi clienti</p>
+  </a>
+  <a href="{{ url_for('transazioni') }}" class="action-card">
+    <span class="action-icon">📊</span>
+    <h3>Log transazioni</h3>
+    <p>Storico anonimizzato dei pagamenti POS</p>
+  </a>
+</div>
+
+<div class="privacy-box">
+  <span class="icon">🔒</span>
+  <p><strong>Privacy by design:</strong> come amministratore non hai accesso a saldi, IBAN o storico personale dei clienti. I dati sensibili sono visibili solo al diretto interessato tramite la sua app autenticata.</p>
+</div>
 
 {% else %}
-    <h1>Benvenuto, {{ esercente_nome }}</h1>
-    <p class="subtitle">Statistiche delle tue ricariche</p>
+<div class="page-header">
+  <div>
+    <h1>Ciao, {{ esercente_nome }} 👋</h1>
+    <p class="subtitle">Riepilogo delle tue operazioni</p>
+  </div>
+</div>
 
-    <div class="stats-grid">
-        <div class="stat-card success">
-            <div class="stat-num">{{ num_proprie }}</div>
-            <div class="stat-label">Ricariche completate</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-num">{{ "%.2f"|format(tot_proprie) }}</div>
-            <div class="stat-label">EUR totali ricaricati</div>
-        </div>
-        <div class="stat-card warning">
-            <div class="stat-num">{{ pending_proprie }}</div>
-            <div class="stat-label">QR in attesa</div>
-        </div>
-    </div>
+<div class="stats-grid">
+  <div class="stat-card success">
+    <div class="stat-accent">✅</div>
+    <div class="stat-num">{{ num_proprie }}</div>
+    <div class="stat-label">Ricariche completate</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-accent">💶</div>
+    <div class="stat-num">{{ "%.0f"|format(tot_proprie) }}</div>
+    <div class="stat-label">EUR totali ricaricati</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-accent">⏳</div>
+    <div class="stat-num">{{ pending_proprie }}</div>
+    <div class="stat-label">QR in attesa</div>
+  </div>
+</div>
 
-    <div class="card" style="background: #eef2ff; border-color: #c7d2fe;">
-        <h3 style="color: var(--primary); margin-bottom: 8px;">Privacy garantita</h3>
-        <p style="font-size: 14px; color: var(--text-muted);">
-            Non hai accesso ai dati personali dei clienti (saldo, storico, identita di chi ha ricevuto le tue ricariche).
-            Vedi solo le tue operazioni e statistiche aggregate.
-        </p>
-    </div>
+<h2>Cosa vuoi fare?</h2>
+<div class="action-grid">
+  <a href="{{ url_for('richiesta_pagamento') }}" class="action-card">
+    <span class="action-icon">💳</span>
+    <h3>Richiedi pagamento POS</h3>
+    <p>Il POS fisico si attiva e attende la carta del cliente</p>
+  </a>
+  <a href="{{ url_for('ricarica') }}" class="action-card">
+    <span class="action-icon">⚡</span>
+    <h3>Ricarica QR</h3>
+    <p>Genera un QR da scansionare con l'app del cliente</p>
+  </a>
+  <a href="{{ url_for('ricariche') }}" class="action-card">
+    <span class="action-icon">📂</span>
+    <h3>Storico ricariche</h3>
+    <p>Visualizza tutte le tue ricariche</p>
+  </a>
+  <a href="{{ url_for('nuovo_utente') }}" class="action-card">
+    <span class="action-icon">➕</span>
+    <h3>Registra cliente</h3>
+    <p>Aggiungi un nuovo cliente con la sua carta NFC</p>
+  </a>
+</div>
 
-    <h2>Azioni</h2>
-    <div class="action-grid">
-        <a href="{{ url_for('ricarica') }}" class="action-card">
-            <h3>Nuova ricarica</h3>
-            <p>Genera un QR code per ricaricare un cliente</p>
-        </a>
-        <a href="{{ url_for('ricariche') }}" class="action-card">
-            <h3>Storico ricariche</h3>
-            <p>Le tue ricariche e il loro stato</p>
-        </a>
-        <a href="{{ url_for('nuovo_utente') }}" class="action-card">
-            <h3>Registra utente</h3>
-            <p>Aggiungi un nuovo cliente con la sua carta NFC</p>
-        </a>
-    </div>
+<div class="privacy-box">
+  <span class="icon">🔒</span>
+  <p><strong>Privacy garantita:</strong> non vedi mai i dati personali dei clienti. Nessun saldo, nessuno storico, nessun nome associato alle ricariche completate.</p>
+</div>
 {% endif %}
 
 {% endblock %}

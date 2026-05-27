@@ -1,23 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Accesso - POS IoT{% endblock %}
-
+{% block title %}Accesso — POS IoT{% endblock %}
 {% block content %}
-<div class="card login-card">
-    <h1>Accesso esercente</h1>
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-logo">P</div>
+    <h1>POS IoT</h1>
+    <p class="login-tagline">Portale esercenti — accedi per continuare</p>
     {% if errore %}
-        <div class="alert error">{{ errore }}</div>
+    <div class="alert error">⚠️ {{ errore }}</div>
     {% endif %}
     <form method="POST">
-        <label>
-            Username
-            <input type="text" name="username" required autofocus autocomplete="username">
-        </label>
-        <label>
-            Password
-            <input type="password" name="password" required autocomplete="current-password">
-        </label>
-        <button type="submit" class="btn primary big">Accedi</button>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-control" type="text" name="username" required autofocus autocomplete="username" placeholder="es. mario">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-control" type="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn primary big">Accedi →</button>
     </form>
-    <p class="hint">Account di test: admin / admin123</p>
+    <p class="hint">Account admin di test: <strong>admin / admin123</strong></p>
+  </div>
 </div>
 {% endblock %}

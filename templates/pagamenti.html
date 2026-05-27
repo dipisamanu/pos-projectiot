@@ -1,39 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Storico pagamenti - POS IoT{% endblock %}
+{% block title %}Storico pagamenti — POS IoT{% endblock %}
 {% block content %}
 <div class="page-header">
-    <div>
-        <h1>Storico pagamenti POS</h1>
-    </div>
-    <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">+ Nuova richiesta</a>
+  <div>
+    <h1>Storico pagamenti POS</h1>
+    <p class="subtitle">Tutte le richieste di pagamento inviate al terminale fisico.</p>
+  </div>
+  <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">+ Nuova richiesta</a>
 </div>
-<table class="data-table">
+<div class="table-wrapper">
+  <table class="data-table">
     <thead>
-        <tr>
-            <th>ID</th><th>Descrizione</th><th>Importo</th><th>Data</th><th>Completato</th><th>Stato</th>
-        </tr>
+      <tr><th>#ID</th><th>Descrizione</th><th>Importo</th><th>Data</th><th>Completata</th><th>Stato</th></tr>
     </thead>
     <tbody>
-        {% for p in pagamenti %}
-        <tr>
-            <td class="mono">#{{ "%05d"|format(p.id) }}</td>
-            <td>{{ p.descrizione }}</td>
-            <td class="amount">{{ "%.2f"|format(p.importo) }} EUR</td>
-            <td>{{ p.data_creazione.strftime('%d/%m %H:%M') }}</td>
-            <td>{{ p.data_completata.strftime('%d/%m %H:%M') if p.data_completata else '—' }}</td>
-            <td>
-                {% if p.stato == 'COMPLETATA' %}
-                    <span class="badge success">{{ p.stato }}</span>
-                {% elif p.stato == 'PENDING' or p.stato == 'IN_CORSO' %}
-                    <span class="badge pending">{{ p.stato }}</span>
-                {% else %}
-                    <span class="badge muted">{{ p.stato }}</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="empty">Nessuna richiesta</td></tr>
-        {% endfor %}
+      {% for p in pagamenti %}
+      <tr>
+        <td class="mono">#{{ "%05d"|format(p.id) }}</td>
+        <td>{{ p.descrizione }}</td>
+        <td class="amount">{{ "%.2f"|format(p.importo) }} EUR</td>
+        <td>{{ p.data_creazione.strftime('%d/%m %H:%M') }}</td>
+        <td>{{ p.data_completata.strftime('%d/%m %H:%M') if p.data_completata else '—' }}</td>
+        <td>
+          {% if p.stato == 'COMPLETATA' %}<span class="badge success">{{ p.stato }}</span>
+          {% elif p.stato in ['PENDING', 'IN_CORSO'] %}<span class="badge pending">{{ p.stato }}</span>
+          {% else %}<span class="badge muted">{{ p.stato }}</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">Nessuna richiesta di pagamento</td></tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+</div>
 {% endblock %}

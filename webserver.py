@@ -97,6 +97,13 @@ def _client_ip():
 # ============================================================
 
 app = Flask(__name__)
+
+with app.app_context():
+    try:
+        query("CREATE TABLE IF NOT EXISTS scan_nfc (id SERIAL PRIMARY KEY, stato TEXT NOT NULL DEFAULT 'WAITING', uid TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW(), scadenza TIMESTAMP NOT NULL DEFAULT NOW() + INTERVAL '60 seconds')")
+    except Exception:
+        pass
+
 app.secret_key = FLASK_SECRET_KEY
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -108,7 +115,6 @@ CORS(app, resources={r"/api/*": {"origins": CORS_ORIGINS}},
 limiter = Limiter(key_func=_client_ip, app=app, default_limits=[])
 
 ph = PasswordHasher()
-
 
 # ============================================================
 # Helper
@@ -427,6 +433,43 @@ def nuovo_utente():
                 return redirect(url_for("dashboard"))
     return render_template("nuovo_utente.html", errore=errore)
 
+@app.route("/scan/start", methods=["POST"])
+@login_richiesto
+def scan_start():
+    row = query(
+        """INSERT INTO scan_nfc (stato, scadenza)
+           VALUES ('WAITING', NOW() + INTERVAL '60 seconds')
+           RETURNING id""",
+        fetch=True, one=True,
+    )
+    return jsonify({"id": row["id"]})
+ 
+ 
+@app.route("/scan/stato/<int:scan_id>")
+@login_richiesto
+def scan_stato(scan_id):
+    row = query(
+        "SELECT stato, uid, scadenza FROM scan_nfc WHERE id=%s",
+        (scan_id,), fetch=True, one=True,
+    )
+    if not row:
+        return jsonify({"stato": "NON_TROVATA"}), 404
+    # Controlla scadenza
+    if row["stato"] == "WAITING" and row["scadenza"] < datetime.now():
+        query("UPDATE scan_nfc SET stato='TIMEOUT' WHERE id=%s", (scan_id,))
+        return jsonify({"stato": "TIMEOUT", "uid": None})
+    return jsonify({"stato": row["stato"], "uid": row["uid"]})
+ 
+ 
+@app.route("/scan/annulla/<int:scan_id>", methods=["POST"])
+@login_richiesto
+def scan_annulla(scan_id):
+    query(
+        "UPDATE scan_nfc SET stato='ANNULLATA' WHERE id=%s AND stato='WAITING'",
+        (scan_id,),
+    )
+    return jsonify({"ok": True})
+ 
 
 @app.route("/transazioni")
 @admin_richiesto

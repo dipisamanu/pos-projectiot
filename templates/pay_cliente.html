@@ -1,53 +1,49 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ricarica conto</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ricarica conto — POS IoT</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="pay-page">
-    <div class="pay-container">
-        <h1>Ricarica conto</h1>
-
-        {% if successo %}
-            <div class="pay-success">
-                <h2>Ricarica completata</h2>
-                <p>Cliente: <strong>{{ nome_utente }}</strong></p>
-                <p>Accreditato: <strong>+{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
-                <p>Nuovo saldo: <strong>{{ "%.2f"|format(nuovo_saldo) }} EUR</strong></p>
-            </div>
-        {% elif errore %}
-            <div class="alert error">{{ errore }}</div>
-            {% if ricarica %}
-                <div class="pay-info">
-                    <p>Importo: <strong>{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
-                    <p>Negozio: <strong>{{ ricarica.nome_negozio }}</strong></p>
-                </div>
-            {% endif %}
-        {% else %}
-            <div class="pay-info">
-                <p>Negozio</p>
-                <p><strong>{{ ricarica.nome_negozio }}</strong></p>
-            </div>
-            <div class="pay-info" style="background: #eef2ff; border-color: #c7d2fe;">
-                <p>Importo da accreditare</p>
-                <p style="font-size: 28px; color: var(--primary); font-weight: 700;">
-                    +{{ "%.2f"|format(ricarica.importo) }} EUR
-                </p>
-            </div>
-            <form method="POST">
-                <label>
-                    UID della tua carta
-                    <input type="text" name="uid" required autofocus inputmode="numeric" placeholder="es. 584195345601">
-                </label>
-                <label>
-                    PIN
-                    <input type="password" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="••••">
-                </label>
-                <button type="submit" class="btn primary big">Conferma ricarica</button>
-            </form>
-        {% endif %}
+  <div class="pay-wrap">
+    {% if successo %}
+    <div class="pay-success-wrap">
+      <div class="check">✅</div>
+      <h2>Ricarica completata!</h2>
+      <p>Cliente: <strong>{{ nome_utente }}</strong></p>
+      <p>Accreditato: <strong>+{{ "%.2f"|format(ricarica.importo) }} EUR</strong></p>
+      <p>Nuovo saldo: <strong>{{ "%.2f"|format(nuovo_saldo) }} EUR</strong></p>
     </div>
+    {% elif errore %}
+    <h1>Ricarica conto</h1>
+    <div class="alert error">⚠️ {{ errore }}</div>
+    {% if ricarica %}
+    <div class="pay-info-card">
+      <div class="merchant">{{ ricarica.nome_negozio }}</div>
+      <div class="amount">+{{ "%.2f"|format(ricarica.importo) }}</div>
+    </div>
+    {% endif %}
+    {% else %}
+    <h1>Ricarica conto</h1>
+    <div class="pay-info-card">
+      <div class="merchant">{{ ricarica.nome_negozio }}</div>
+      <div class="amount">+{{ "%.2f"|format(ricarica.importo) }}</div>
+      <div style="font-size:12px;color:var(--primary);margin-top:4px;font-weight:500;">EUR da accreditare</div>
+    </div>
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">UID della tua carta</label>
+        <input class="form-control" type="text" name="uid" required autofocus inputmode="numeric" placeholder="es. 584195345601">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PIN (4 cifre)</label>
+        <input class="form-control" type="password" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="••••">
+      </div>
+      <button type="submit" class="btn primary big">Conferma ricarica →</button>
+    </form>
+    {% endif %}
+  </div>
 </body>
 </html>

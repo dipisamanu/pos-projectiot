@@ -1,35 +1,139 @@
 {% extends "base.html" %}
-{% block title %}Nuovo utente - POS IoT{% endblock %}
-
+{% block title %}Registra cliente — POS IoT{% endblock %}
 {% block content %}
-<h1>Registra nuovo utente</h1>
-<p class="subtitle">Inserisci i dati del cliente e dell'UID della sua carta NFC</p>
 
-<div class="card" style="max-width: 480px;">
-    {% if errore %}
-        <div class="alert error">{{ errore }}</div>
-    {% endif %}
-    <form method="POST">
-        <label>
-            UID della carta NFC
-            <input type="text" name="uid" required placeholder="es. 584195345601" autofocus>
-        </label>
-        <label>
-            Nome e cognome
-            <input type="text" name="nome" required placeholder="es. Mario Rossi">
-        </label>
-        <label>
-            PIN (4 cifre)
-            <input type="text" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="1234">
-        </label>
-        <label>
-            Saldo iniziale (EUR)
-            <input type="number" name="saldo" required step="0.01" min="0" value="0">
-        </label>
-        <div class="form-actions">
-            <a href="{{ url_for('utenti') }}" class="btn">Annulla</a>
-            <button type="submit" class="btn primary">Registra</button>
-        </div>
-    </form>
+<div class="page-header">
+  <div>
+    <h1>Registra nuovo cliente</h1>
+    <p class="subtitle">Compila i dati e scansiona la carta NFC con il POS fisico</p>
+  </div>
+  <a href="{{ url_for('utenti') }}" class="btn">← Torna alla lista</a>
 </div>
+
+<div class="card" style="max-width:520px;">
+  {% if errore %}
+  <div class="alert error">⚠️ {{ errore }}</div>
+  {% endif %}
+
+  <form method="POST" id="form-nuovo">
+
+    <div class="form-group">
+      <label class="form-label">UID carta NFC</label>
+      <div class="uid-input-group">
+        <input class="form-control" type="text" name="uid" id="uid-input"
+               required placeholder="es. 584195345601" autocomplete="off">
+        <button type="button" class="btn-nfc" id="btn-scan" onclick="avviaScan()">
+          📡 <span id="btn-scan-label">Scansiona con POS</span>
+        </button>
+      </div>
+      <div class="scan-status" id="scan-status">
+        <span class="spinner" id="scan-spinner"></span>
+        <span id="scan-msg">Avvicina la carta al POS fisico...</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Nome e cognome</label>
+      <input class="form-control" type="text" name="nome" required placeholder="es. Mario Rossi">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">PIN (4 cifre)</label>
+      <input class="form-control" type="text" name="pin" required
+             pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="1234">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Saldo iniziale (EUR)</label>
+      <input class="form-control" type="number" name="saldo"
+             required step="0.01" min="0" value="0.00">
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('utenti') }}" class="btn">Annulla</a>
+      <button type="submit" class="btn primary">Registra cliente →</button>
+    </div>
+
+  </form>
+</div>
+
+<script>
+let scanId = null;
+let pollInterval = null;
+
+async function avviaScan() {
+  const btn = document.getElementById('btn-scan');
+  const label = document.getElementById('btn-scan-label');
+  const status = document.getElementById('scan-status');
+  const spinner = document.getElementById('scan-spinner');
+  const msg = document.getElementById('scan-msg');
+  const input = document.getElementById('uid-input');
+
+  // Avvia la scansione
+  btn.classList.add('scanning');
+  label.textContent = 'Annulla';
+  btn.onclick = annullaScan;
+  status.className = 'scan-status visible';
+  spinner.style.display = 'block';
+  msg.textContent = 'Avvicina la carta NFC al POS fisico...';
+
+  try {
+    const resp = await fetch('/scan/start', { method: 'POST' });
+    const data = await resp.json();
+    scanId = data.id;
+
+    // Polling ogni 1.5s
+    pollInterval = setInterval(async () => {
+      try {
+        const r = await fetch('/scan/stato/' + scanId);
+        const d = await r.json();
+        if (d.stato === 'DONE' && d.uid) {
+          clearInterval(pollInterval);
+          input.value = d.uid;
+          btn.classList.remove('scanning');
+          btn.classList.add('done');
+          label.textContent = 'UID acquisito ✓';
+          btn.onclick = null;
+          spinner.style.display = 'none';
+          status.className = 'scan-status visible success';
+          msg.textContent = 'UID acquisito: ' + d.uid;
+          scanId = null;
+        } else if (d.stato === 'TIMEOUT' || d.stato === 'ANNULLATA') {
+          clearInterval(pollInterval);
+          resetScan();
+          status.className = 'scan-status visible error';
+          spinner.style.display = 'none';
+          msg.textContent = d.stato === 'TIMEOUT' ? 'Timeout: nessuna carta rilevata.' : 'Scansione annullata.';
+          scanId = null;
+        }
+      } catch(e) { /* ignora errori di rete temporanei */ }
+    }, 1500);
+
+  } catch(e) {
+    resetScan();
+    status.className = 'scan-status visible error';
+    msg.textContent = 'Errore di rete. Riprova.';
+    spinner.style.display = 'none';
+  }
+}
+
+async function annullaScan() {
+  clearInterval(pollInterval);
+  if (scanId) {
+    await fetch('/scan/annulla/' + scanId, { method: 'POST' }).catch(() => {});
+    scanId = null;
+  }
+  resetScan();
+  document.getElementById('scan-status').className = 'scan-status';
+}
+
+function resetScan() {
+  const btn = document.getElementById('btn-scan');
+  const label = document.getElementById('btn-scan-label');
+  btn.className = 'btn-nfc';
+  btn.onclick = avviaScan;
+  label.textContent = 'Scansiona con POS';
+  document.getElementById('scan-spinner').style.display = 'block';
+}
+</script>
 {% endblock %}

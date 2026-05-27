@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Nuova ricarica - POS IoT{% endblock %}
-
+{% block title %}Nuova ricarica QR — POS IoT{% endblock %}
 {% block content %}
-<h1>Nuova ricarica</h1>
-<p class="subtitle">Inserisci l'importo: verra generato un QR code che il cliente puo scansionare con la sua app per ricevere la ricarica sul proprio conto</p>
-
-<div class="card" style="max-width: 480px;">
-    {% if errore %}
-        <div class="alert error">{{ errore }}</div>
-    {% endif %}
-    <form method="POST">
-        <label>
-            Importo da ricaricare (EUR)
-            <input type="number" name="importo" required step="0.01" min="0.01" autofocus placeholder="50.00">
-        </label>
-        <p class="hint" style="text-align: left;">Il QR sara valido per 5 minuti dalla generazione</p>
-        <button type="submit" class="btn primary big">Genera QR code</button>
-    </form>
+<div class="page-header">
+  <div>
+    <h1>Nuova ricarica QR</h1>
+    <p class="subtitle">Il cliente scansiona il QR con l'app per ricevere la ricarica sul conto.</p>
+  </div>
+</div>
+<div class="card" style="max-width:480px;">
+  {% if errore %}<div class="alert error">⚠️ {{ errore }}</div>{% endif %}
+  <form method="POST">
+    <div class="form-group">
+      <label class="form-label">Importo da ricaricare (EUR)</label>
+      <input class="form-control" type="number" name="importo" required step="0.01" min="0.01" autofocus placeholder="50.00">
+      <p class="form-hint">Il QR sarà valido per 5 minuti dalla generazione.</p>
+    </div>
+    <button type="submit" class="btn primary big">⚡ Genera QR code →</button>
+  </form>
 </div>
 {% endblock %}

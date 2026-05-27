@@ -432,6 +432,66 @@ def gestisci_richiesta(richiesta):
         led_blink(1, 0, 0, n=3)
         mostra('Errore DB', 'Riprova', 3)
 
+def cerca_scan_pendente():
+    """Controlla se il portale web ha richiesto una scansione UID."""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT id FROM scan_nfc
+            WHERE stato = 'WAITING' AND scadenza > NOW()
+            ORDER BY created_at ASC LIMIT 1
+        """)
+        r = cur.fetchone()
+        cur.close(); conn.close()
+        return r['id'] if r else None
+    except Exception:
+        return None
+ 
+def completa_scan(scan_id, uid):
+    """Salva l'UID letto nel DB e segna la scansione come completata."""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE scan_nfc SET stato='DONE', uid=%s WHERE id=%s",
+            (str(uid), scan_id)
+        )
+        conn.commit(); cur.close(); conn.close()
+    except Exception:
+        pass
+ 
+def gestisci_scan(scan_id):
+    """Legge un tag NFC e salva l'UID per la registrazione via portale."""
+    led_giallo()
+    mostra('Scansione UID', 'Avvicina tag')
+    fine = time.time() + 55  # 5s di margine prima della scadenza nel DB (60s)
+    while time.time() < fine:
+        # Controlla se la scansione è stata annullata dal portale
+        try:
+            conn = psycopg2.connect(**DB_CONFIG)
+            cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT stato FROM scan_nfc WHERE id=%s", (scan_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row and row['stato'] != 'WAITING':
+                led_off()
+                mostra('POS IoT', 'In attesa...')
+                return
+        except Exception:
+            pass
+        uid, _ = reader.read_no_block()
+        if uid:
+            completa_scan(scan_id, uid)
+            led_blink(0, 1, 0, n=3)
+            mostra('UID letto!', str(uid)[:14], 2)
+            led_off()
+            mostra('POS IoT', 'In attesa...')
+            return
+        time.sleep(0.4)
+    led_off()
+    mostra('POS IoT', 'In attesa...')
+
 # ============================================================
 # Main loop
 # ============================================================
@@ -444,6 +504,10 @@ def main():
         led_off()
 
         while True:
+            scan_id = cerca_scan_pendente()
+            if scan_id:
+                gestisci_scan(scan_id)
+                continue
             richiesta = cerca_richiesta_pendente()
 
             if richiesta:

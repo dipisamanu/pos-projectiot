@@ -1,45 +1,43 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}POS IoT{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}POS IoT{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    {% if session.esercente_id %}
-    <nav class="navbar">
-        <div class="nav-brand">
-            <div class="logo">P</div>
-            <span>POS IoT</span>
-            <span style="color: var(--text-muted); font-weight: 400; font-size: 14px;">
-                · {{ esercente_nome }}
-                {% if ruolo == 'admin' %}
-                    <span class="badge muted" style="margin-left: 6px;">ADMIN</span>
-                {% endif %}
-            </span>
-        </div>
-        <div class="nav-links">
-            <a href="{{ url_for('dashboard') }}">Dashboard</a>
-            <a href="{{ url_for('ricarica') }}">Ricarica</a>
-            <a href="{{ url_for('ricariche') }}">Storico QR</a>
-            <a href="{{ url_for('nuovo_utente') }}">Registra utente</a>
-            <a href="{{ url_for('richiesta_pagamento') }}">Richiedi pagamento</a>
-            <a href="{{ url_for('pagamenti') }}">Storico pagamenti</a>
-            <a href="{{ url_for('ricarica') }}">Nuova ricarica</a>
-            <a href="{{ url_for('ricariche') }}">Storico ricariche</a>
-            <a href="{{ url_for('nuovo_utente') }}">Registra cliente</a>
-            {% if ruolo == 'admin' %}
-                <a href="{{ url_for('utenti') }}">Utenti</a>
-                <a href="{{ url_for('transazioni') }}">Transazioni</a>
-            {% endif %}
-            <a href="{{ url_for('logout') }}" class="logout">Esci</a>
-        </div>
-    </nav>
+{% if session.esercente_id %}
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="nav-logo">P</div>
+    <span class="nav-title">POS IoT</span>
+    <span class="nav-subtitle">· {{ esercente_nome }}</span>
+    {% if ruolo == 'admin' %}<span class="nav-badge">Admin</span>{% endif %}
+  </div>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}">🏠 <span>Dashboard</span></a>
+    {% if ruolo == 'admin' %}
+      <a href="{{ url_for('richiesta_pagamento') }}">💳 <span>Richiedi pagamento</span></a>
+      <a href="{{ url_for('pagamenti') }}">📋 <span>Pagamenti</span></a>
+      <a href="{{ url_for('ricarica') }}">⚡ <span>Ricarica QR</span></a>
+      <a href="{{ url_for('ricariche') }}">📂 <span>Storico QR</span></a>
+      <a href="{{ url_for('utenti') }}">👥 <span>Clienti</span></a>
+      <a href="{{ url_for('transazioni') }}">📊 <span>Transazioni</span></a>
+      <a href="{{ url_for('nuovo_utente') }}">➕ <span>Registra cliente</span></a>
+    {% else %}
+      <a href="{{ url_for('richiesta_pagamento') }}">💳 <span>Richiedi pagamento</span></a>
+      <a href="{{ url_for('pagamenti') }}">📋 <span>Pagamenti</span></a>
+      <a href="{{ url_for('ricarica') }}">⚡ <span>Ricarica QR</span></a>
+      <a href="{{ url_for('ricariche') }}">📂 <span>Storico QR</span></a>
+      <a href="{{ url_for('nuovo_utente') }}">➕ <span>Registra cliente</span></a>
     {% endif %}
-
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
+    <a href="{{ url_for('logout') }}" class="nav-logout">🚪 <span>Esci</span></a>
+  </div>
+</nav>
+{% endif %}
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
 </body>
 </html>

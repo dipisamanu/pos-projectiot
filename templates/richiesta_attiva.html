@@ -1,64 +1,69 @@
 {% extends "base.html" %}
-{% block title %}Pagamento in attesa - POS IoT{% endblock %}
+{% block title %}Pagamento in attesa — POS IoT{% endblock %}
 {% block content %}
 <div class="page-header">
-    <div>
-        <h1>Pagamento in attesa sul POS</h1>
-        <p class="subtitle">Il POS mostrerà la richiesta. Il cliente deve avvicinare la carta.</p>
-    </div>
+  <div>
+    <h1>Pagamento inviato al POS</h1>
+    <p class="subtitle">Il terminale fisico ha ricevuto la richiesta. Il cliente avvicini la carta.</p>
+  </div>
 </div>
-<div class="qr-container">
-    <div class="qr-info">
-        <div class="qr-importo">{{ "%.2f"|format(richiesta.importo) }} EUR</div>
-        <div class="qr-meta">
-            <p><strong>Descrizione:</strong> {{ richiesta.descrizione }}</p>
-            <p><strong>Scadenza:</strong> 10 minuti</p>
-            <p><strong>Stato:</strong> <span class="badge pending" id="badge-stato">{{ richiesta.stato }}</span></p>
-        </div>
-        <div id="stato-live">In attesa che il cliente avvicini la carta al POS...</div>
-        <div class="qr-actions">
-            <form method="POST" action="{{ url_for('richiesta_annulla', id=richiesta.id) }}" id="form-annulla">
-                <button type="submit" class="btn danger">Annulla</button>
-            </form>
-            <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">Nuova richiesta</a>
-            <a href="{{ url_for('dashboard') }}" class="btn">Dashboard</a>
-        </div>
+<div class="split-layout">
+  <div class="card" style="margin:0;">
+    <div class="amount-display">{{ "%.2f"|format(richiesta.importo) }}</div>
+    <div class="amount-label">EUR richiesti</div>
+    <ul class="meta-list">
+      <li><span class="meta-key">Descrizione</span><span class="meta-val">{{ richiesta.descrizione }}</span></li>
+      <li><span class="meta-key">Scadenza</span><span class="meta-val">10 minuti</span></li>
+      <li><span class="meta-key">Stato</span>
+          <span class="badge pending" id="badge-stato">{{ richiesta.stato }}</span></li>
+    </ul>
+    <div class="status-box" id="stato-live">⏳ In attesa che il cliente avvicini la carta al POS...</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+      <form method="POST" action="{{ url_for('richiesta_annulla', id=richiesta.id) }}" id="form-annulla">
+        <button type="submit" class="btn danger">✕ Annulla</button>
+      </form>
+      <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">+ Nuova richiesta</a>
+      <a href="{{ url_for('dashboard') }}" class="btn">Dashboard</a>
     </div>
+  </div>
+  <div class="card" style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px 24px;text-align:center;">
+    <div style="font-size:64px;" id="pos-anim">📟</div>
+    <p style="font-size:14px;color:var(--text-muted);">Il POS fisico mostrerà l'importo sul display e si metterà in attesa della carta NFC.</p>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted);">
+      <span class="spinner" style="border-color:var(--primary);border-top-color:transparent;"></span>
+      In attesa di risposta...
+    </div>
+  </div>
 </div>
 <script>
+async function poll() {
+  try {
+    const r = await fetch('/richiesta-pagamento/{{ richiesta.id }}/stato');
+    if (!r.ok) return;
+    const d = await r.json();
     const badge = document.getElementById('badge-stato');
-    const statoLive = document.getElementById('stato-live');
-    const formAnnulla = document.getElementById('form-annulla');
-
-    async function controllaStato() {
-        try {
-            const resp = await fetch('/richiesta-pagamento/{{ richiesta.id }}/stato');
-            if (!resp.ok) return;
-            const data = await resp.json();
-            if (data.stato === 'COMPLETATA') {
-                badge.className = 'badge success';
-                badge.textContent = 'COMPLETATA';
-                statoLive.textContent = 'Pagamento completato alle ' + data.data_completata;
-                formAnnulla.style.display = 'none';
-                clearInterval(intervallo);
-            } else if (data.stato === 'IN_CORSO') {
-                badge.className = 'badge warning';
-                badge.textContent = 'IN CORSO';
-                statoLive.textContent = 'Cliente sta inserendo la carta...';
-            } else if (data.stato === 'NEGATA') {
-                badge.className = 'badge error';
-                badge.textContent = 'NEGATA';
-                statoLive.textContent = 'Pagamento negato (fondi insufficienti)';
-                clearInterval(intervallo);
-            } else if (data.stato === 'ANNULLATA' || data.stato === 'SCADUTA') {
-                badge.className = 'badge muted';
-                badge.textContent = data.stato;
-                formAnnulla.style.display = 'none';
-                clearInterval(intervallo);
-            }
-        } catch (e) {}
+    const box = document.getElementById('stato-live');
+    const form = document.getElementById('form-annulla');
+    const anim = document.getElementById('pos-anim');
+    if (d.stato === 'COMPLETATA') {
+      badge.className = 'badge success'; badge.textContent = 'COMPLETATA';
+      box.className = 'status-box done'; box.textContent = '✅ Pagamento completato alle ' + d.data_completata;
+      anim.textContent = '✅'; form.style.display = 'none'; clearInterval(iv);
+    } else if (d.stato === 'IN_CORSO') {
+      badge.className = 'badge info'; badge.textContent = 'IN CORSO';
+      box.className = 'status-box active'; box.textContent = '📡 Cliente sta inserendo la carta...';
+      anim.textContent = '📡';
+    } else if (d.stato === 'NEGATA') {
+      badge.className = 'badge error'; badge.textContent = 'NEGATA';
+      box.className = 'status-box denied'; box.textContent = '✕ Pagamento negato (fondi insufficienti o carta bloccata)';
+      anim.textContent = '❌'; clearInterval(iv);
+    } else if (d.stato === 'ANNULLATA' || d.stato === 'SCADUTA') {
+      badge.className = 'badge muted'; badge.textContent = d.stato;
+      box.className = 'status-box denied'; box.textContent = '✕ Richiesta ' + d.stato.toLowerCase();
+      anim.textContent = '⏹️'; form.style.display = 'none'; clearInterval(iv);
     }
-    const intervallo = setInterval(controllaStato, 2000);
-    controllaStato();
+  } catch(e) {}
+}
+const iv = setInterval(poll, 2000); poll();
 </script>
 {% endblock %}
