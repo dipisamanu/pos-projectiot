@@ -24,6 +24,11 @@
             <a href="{{ url_for('ricarica') }}">Ricarica</a>
             <a href="{{ url_for('ricariche') }}">Storico QR</a>
             <a href="{{ url_for('nuovo_utente') }}">Registra utente</a>
+            <a href="{{ url_for('richiesta_pagamento') }}">Richiedi pagamento</a>
+            <a href="{{ url_for('pagamenti') }}">Storico pagamenti</a>
+            <a href="{{ url_for('ricarica') }}">Nuova ricarica</a>
+            <a href="{{ url_for('ricariche') }}">Storico ricariche</a>
+            <a href="{{ url_for('nuovo_utente') }}">Registra cliente</a>
             {% if ruolo == 'admin' %}
                 <a href="{{ url_for('utenti') }}">Utenti</a>
                 <a href="{{ url_for('transazioni') }}">Transazioni</a>

@@ -3,8 +3,8 @@
 Inizializza database POS IoT
 - Tabelle: utenti, esercenti, transazioni, ricariche, bonifici,
   refresh_tokens, revoked_access_tokens
-- Password con Argon2 (sicuro)
-- Foreign key id_utente per integrita referenziale
+- IBAN deterministico per utenti (IT60POS + id zero-paddato 14 cifre)
+- Password Argon2, PIN SHA256
 """
 
 import hashlib
@@ -47,6 +47,11 @@ def hash_password(password: str) -> str:
     return ph.hash(password)
 
 
+def genera_iban(user_id: int) -> str:
+    # Stesso formato usato dal webserver
+    return f"IT60POS{user_id:014d}"
+
+
 def inizializza():
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
@@ -59,6 +64,7 @@ def inizializza():
     cur.execute("DROP TABLE IF EXISTS transazioni")
     cur.execute("DROP TABLE IF EXISTS esercenti")
     cur.execute("DROP TABLE IF EXISTS utenti")
+    cur.execute("DROP TABLE IF EXISTS richieste_pagamento")
 
     cur.execute("""
         CREATE TABLE utenti (
@@ -69,7 +75,8 @@ def inizializza():
             saldo         NUMERIC(12,2) NOT NULL DEFAULT 0.00,
             attiva        BOOLEAN NOT NULL DEFAULT TRUE,
             username      TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL
+            password_hash TEXT NOT NULL,
+            iban          TEXT UNIQUE
         )
     """)
 
@@ -145,11 +152,25 @@ def inizializza():
             causale           TEXT NOT NULL,
             importo           NUMERIC(12,2) NOT NULL,
             stato             TEXT NOT NULL DEFAULT 'COMPLETATO',
+            id_utente_riceve  INTEGER REFERENCES utenti(id),
             creato_il         TIMESTAMP NOT NULL DEFAULT NOW()
         )
     """)
+    cur.execute("""
+    CREATE TABLE richieste_pagamento (
+        id              SERIAL PRIMARY KEY,
+        id_esercente    INTEGER NOT NULL REFERENCES esercenti(id),
+        importo         NUMERIC(12,2) NOT NULL,
+        descrizione     TEXT NOT NULL DEFAULT 'Pagamento POS',
+        stato           TEXT NOT NULL DEFAULT 'PENDING',
+        id_utente_paga  INTEGER REFERENCES utenti(id),
+        data_creazione  TIMESTAMP NOT NULL DEFAULT NOW(),
+        data_completata TIMESTAMP,
+        scadenza        TIMESTAMP NOT NULL
+    )
+""")
 
-    # Seed utenti (clienti app)
+    # Seed utenti (clienti app) + generazione IBAN deterministico
     utenti_seed = [
         ("584195345601", "Mario Rossi",  "1234", Decimal("2450.00"), "mario.rossi",  "password123"),
         ("111222333444", "Luca Bianchi", "5678", Decimal("980.20"),  "luca.bianchi", "password123"),
@@ -158,10 +179,13 @@ def inizializza():
     for uid, nome, pin, saldo, username, pwd in utenti_seed:
         cur.execute(
             """INSERT INTO utenti (uid, nome, pin_hash, saldo, attiva, username, password_hash)
-               VALUES (%s, %s, %s, %s, TRUE, %s, %s)""",
+               VALUES (%s, %s, %s, %s, TRUE, %s, %s) RETURNING id""",
             (uid, nome, hash_pin(pin), saldo, username, hash_password(pwd)),
         )
-        print(f"Utente inserito: {nome} (login app: {username} / password123)")
+        new_id = cur.fetchone()[0]
+        iban = genera_iban(new_id)
+        cur.execute("UPDATE utenti SET iban=%s WHERE id=%s", (iban, new_id))
+        print(f"Utente inserito: {nome} (login: {username} / password123) - IBAN: {iban}")
 
     # Seed esercenti (login sito)
     esercenti = [
@@ -208,7 +232,6 @@ def inizializza():
                 (id_u, uid_u, nome_u, titolo, tipo, categoria,
                  importo, saldo_prima, saldo, datetime.now() - timedelta(days=i * 2)),
             )
-        # Aggiorna saldo finale dopo le transazioni demo
         cur.execute("UPDATE utenti SET saldo=%s WHERE id=%s", (saldo, id_u))
         print(f"Inserite {len(demo)} transazioni demo per Mario Rossi")
 

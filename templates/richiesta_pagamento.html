@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Richiedi pagamento - POS IoT{% endblock %}
+{% block content %}
+<h1>Richiedi pagamento al POS</h1>
+<p class="subtitle">Il POS fisico riceverà la richiesta e attenderà la carta del cliente</p>
+<div class="card" style="max-width: 480px;">
+    {% if errore %}
+        <div class="alert error">{{ errore }}</div>
+    {% endif %}
+    <form method="POST">
+        <label>
+            Importo (EUR)
+            <input type="number" name="importo" required step="0.01" min="0.01" autofocus placeholder="20.00">
+        </label>
+        <label>
+            Descrizione
+            <input type="text" name="descrizione" placeholder="es. Caffè e cornetto" maxlength="40">
+        </label>
+        <p class="hint" style="text-align:left;">La richiesta resterà attiva per 10 minuti</p>
+        <button type="submit" class="btn primary big">Invia al POS</button>
+    </form>
+</div>
+{% endblock %}

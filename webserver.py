@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 POS IoT - Webserver Flask
-- API REST con JWT (access + refresh token, blacklist)
-- Argon2 per password
+- API REST con JWT (access + refresh, blacklist)
+- Argon2 per password, SHA256 per PIN carta
 - Rate limit anti bruteforce
-- Sito esercente HTML (admin + esercente)
-- Decimal per calcoli monetari
+- Sito esercente HTML (admin + esercente) con privacy stretta
+- Decimal per calcoli monetari, FOR UPDATE su tutte le scritture su saldo
 """
 
 import hashlib
@@ -71,7 +71,7 @@ if not DB_CONFIG["password"]:
 JWT_SECRET           = require_env("JWT_SECRET")
 FLASK_SECRET_KEY     = require_env("FLASK_SECRET_KEY")
 JWT_ALGO             = os.getenv("JWT_ALGO", "HS256")
-ACCESS_TOKEN_MINUTES = env_int("ACCESS_TOKEN_MINUTES", 15)
+ACCESS_TOKEN_MINUTES = env_int("ACCESS_TOKEN_MINUTES", 1440)  # 24h per demo
 REFRESH_TOKEN_DAYS   = env_int("REFRESH_TOKEN_DAYS", 14)
 QR_VALIDITA_SECONDI  = env_int("QR_VALIDITA_SECONDI", 300)
 LOGIN_RATE_LIMIT     = os.getenv("LOGIN_RATE_LIMIT", "10 per minute")
@@ -104,7 +104,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = env_bool("SESSION_COOKIE_SECURE", False)
 
 CORS(app, resources={r"/api/*": {"origins": CORS_ORIGINS}},
-     allow_headers=["Content-Type", "Authorization"])
+     allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"])
 limiter = Limiter(key_func=_client_ip, app=app, default_limits=[])
 
 ph = PasswordHasher()
@@ -166,9 +166,17 @@ def to_decimal(value, default="0"):
         return Decimal(default)
 
 
+def iban_normalize(iban: str) -> str:
+    return iban.replace(" ", "").upper()
+
+
 def iban_valido(iban):
-    cleaned = iban.replace(" ", "").upper()
+    cleaned = iban_normalize(iban)
     return bool(re.match(r"^[A-Z]{2}[0-9A-Z]{13,32}$", cleaned))
+
+
+def genera_iban(user_id: int) -> str:
+    return f"IT60POS{user_id:014d}"
 
 
 # ============================================================
@@ -273,7 +281,7 @@ def token_richiesto(f):
                       (user_id,), fetch=True, one=True)
             if not u:
                 return jsonify({"success": False, "message": "Utente non trovato"}), 401
-            if not u["attiva"] and f.__name__ not in ("api_card_status",):
+            if not u["attiva"] and f.__name__ not in ("api_card_status", "api_me"):
                 return jsonify({"success": False, "message": "Carta bloccata"}), 403
             g.user_id = user_id
             g.jwt_payload = payload
@@ -342,7 +350,7 @@ def dashboard():
             modalita="admin",
             num_utenti=query("SELECT COUNT(*) AS n FROM utenti",
                              fetch=True, one=True)["n"],
-            num_trans=query("SELECT COUNT(*) AS n FROM transazioni",
+            num_trans=query("SELECT COUNT(*) AS n FROM transazioni WHERE esito='APPROVATA'",
                             fetch=True, one=True)["n"],
             num_ricar=query("SELECT COUNT(*) AS n FROM ricariche WHERE stato='COMPLETATA'",
                             fetch=True, one=True)["n"],
@@ -366,6 +374,7 @@ def dashboard():
 @app.route("/utenti")
 @admin_richiesto
 def utenti():
+    # Solo admin, solo ID e nome (privacy: nessun saldo, nessun IBAN, nessuno storico)
     cerca = request.args.get("q", "").strip()
     if cerca:
         lista = query("SELECT id, nome FROM utenti WHERE LOWER(nome) LIKE %s ORDER BY nome",
@@ -399,7 +408,6 @@ def nuovo_utente():
             if query("SELECT id FROM utenti WHERE uid=%s", (uid,), fetch=True, one=True):
                 errore = "Esiste gia un utente con questo UID"
             else:
-                # Genera username automatico dal nome
                 username = nome.lower().replace(" ", ".").replace("'", "")
                 base_username = username
                 contatore = 1
@@ -407,12 +415,15 @@ def nuovo_utente():
                             (username,), fetch=True, one=True):
                     contatore += 1
                     username = f"{base_username}{contatore}"
-                # Password app di default
-                query(
+                # Inserisci utente, recupera id e genera IBAN deterministico
+                row = query(
                     """INSERT INTO utenti (uid, nome, pin_hash, saldo, attiva, username, password_hash)
-                       VALUES (%s, %s, %s, %s, TRUE, %s, %s)""",
+                       VALUES (%s, %s, %s, %s, TRUE, %s, %s) RETURNING id""",
                     (uid, nome, hash_pin(pin), saldo_n, username, ph.hash("password123")),
+                    fetch=True, one=True,
                 )
+                new_id = row["id"]
+                query("UPDATE utenti SET iban=%s WHERE id=%s", (genera_iban(new_id), new_id))
                 return redirect(url_for("dashboard"))
     return render_template("nuovo_utente.html", errore=errore)
 
@@ -420,6 +431,7 @@ def nuovo_utente():
 @app.route("/transazioni")
 @admin_richiesto
 def transazioni():
+    # Log anonimizzato: ID, data, importo, esito. NESSUN saldo, NESSUN nome.
     lista = query(
         "SELECT id, data_ora, importo, esito FROM transazioni ORDER BY data_ora DESC LIMIT 100",
         fetch=True)
@@ -455,7 +467,6 @@ def qr_attivo(token):
               (token, session["esercente_id"]), fetch=True, one=True)
     if not r:
         abort(404)
-    # Il QR contiene solo il token, l'app lo invia al backend
     img = qrcode.make(token)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -498,10 +509,81 @@ def ricariche():
         (session["esercente_id"],), fetch=True)
     return render_template("ricariche.html", ricariche=lista)
 
+@app.route("/richiesta-pagamento", methods=["GET", "POST"])
+@login_richiesto
+def richiesta_pagamento():
+    errore = None
+    if request.method == "POST":
+        try:
+            importo = Decimal(request.form.get("importo", "0"))
+            if importo <= 0:
+                raise ValueError()
+        except (ValueError, InvalidOperation):
+            errore = "Importo non valido"
+            return render_template("richiesta_pagamento.html", errore=errore)
+        descrizione = request.form.get("descrizione", "Pagamento POS").strip() or "Pagamento POS"
+        scadenza = datetime.now() + timedelta(minutes=10)
+        row = query(
+            """INSERT INTO richieste_pagamento (id_esercente, importo, descrizione, scadenza)
+               VALUES (%s, %s, %s, %s) RETURNING id""",
+            (session["esercente_id"], importo, descrizione, scadenza),
+            fetch=True, one=True,
+        )
+        return redirect(url_for("richiesta_attiva", id=row["id"]))
+    return render_template("richiesta_pagamento.html", errore=errore)
+
+
+@app.route("/richiesta-pagamento/<int:id>")
+@login_richiesto
+def richiesta_attiva(id):
+    r = query(
+        """SELECT r.*, e.nome_negozio FROM richieste_pagamento r
+           JOIN esercenti e ON e.id = r.id_esercente
+           WHERE r.id=%s AND r.id_esercente=%s""",
+        (id, session["esercente_id"]), fetch=True, one=True)
+    if not r:
+        abort(404)
+    return render_template("richiesta_attiva.html", richiesta=r)
+
+
+@app.route("/richiesta-pagamento/<int:id>/stato")
+@login_richiesto
+def richiesta_stato(id):
+    r = query(
+        """SELECT stato, data_completata FROM richieste_pagamento
+           WHERE id=%s AND id_esercente=%s""",
+        (id, session["esercente_id"]), fetch=True, one=True)
+    if not r:
+        return jsonify({"errore": "non trovato"}), 404
+    return jsonify({
+        "stato": r["stato"],
+        "data_completata": r["data_completata"].strftime("%H:%M:%S") if r["data_completata"] else None,
+    })
+
+
+@app.route("/richiesta-pagamento/<int:id>/annulla", methods=["POST"])
+@login_richiesto
+def richiesta_annulla(id):
+    query(
+        """UPDATE richieste_pagamento SET stato='ANNULLATA'
+           WHERE id=%s AND id_esercente=%s AND stato IN ('PENDING','IN_CORSO')""",
+        (id, session["esercente_id"]))
+    return redirect(url_for("pagamenti"))
+
+
+@app.route("/pagamenti")
+@login_richiesto
+def pagamenti():
+    lista = query(
+        """SELECT id, importo, descrizione, stato, data_creazione, data_completata
+           FROM richieste_pagamento WHERE id_esercente=%s
+           ORDER BY data_creazione DESC LIMIT 100""",
+        (session["esercente_id"],), fetch=True)
+    return render_template("pagamenti.html", pagamenti=lista)
 
 @app.route("/pay/<token>", methods=["GET", "POST"])
 def pay_cliente(token):
-    # Fallback web per ricarica senza app Flutter (UID + PIN)
+    # Fallback web: UID+PIN per chi non usa l'app Flutter
     r = query(
         """SELECT r.*, e.nome_negozio FROM ricariche r
            JOIN esercenti e ON e.id = r.id_esercente WHERE r.token=%s""",
@@ -596,7 +678,6 @@ def api_refresh():
         return jsonify({"success": False, "message": "Refresh token non valido"}), 401
     if row["expires_at"] < datetime.utcnow():
         return jsonify({"success": False, "message": "Refresh token scaduto"}), 401
-    # Rotazione: revoca quello vecchio, ne genera uno nuovo
     query("UPDATE refresh_tokens SET revoked=TRUE, revoked_at=NOW(), last_used_at=NOW() WHERE id=%s",
           (row["id"],))
     return jsonify({
@@ -616,6 +697,28 @@ def api_logout():
     if raw_refresh:
         revoke_refresh_token(raw_refresh)
     return jsonify({"success": True})
+
+
+@app.route("/api/me", methods=["GET"])
+@token_richiesto
+def api_me():
+    u = query(
+        "SELECT id, nome, username, saldo, iban, attiva FROM utenti WHERE id=%s",
+        (g.user_id,), fetch=True, one=True)
+    if not u:
+        return jsonify({"success": False, "message": "Utente non trovato"}), 404
+    # Se per qualche ragione l'IBAN manca (utenti vecchi), lo genera ora
+    iban = u["iban"] or genera_iban(int(u["id"]))
+    if not u["iban"]:
+        query("UPDATE utenti SET iban=%s WHERE id=%s", (iban, u["id"]))
+    return jsonify({
+        "id":          u["id"],
+        "name":        u["nome"],
+        "username":    u["username"],
+        "balance":     float(u["saldo"]),
+        "iban":        iban,
+        "card_active": bool(u["attiva"]),
+    })
 
 
 @app.route("/api/balance", methods=["GET"])
@@ -743,9 +846,16 @@ def api_card_status():
 @app.route("/api/transfer", methods=["POST"])
 @token_richiesto
 def api_transfer():
+    """
+    Bonifico: se l'IBAN destinatario appartiene a un utente del sistema,
+    accredita il suo saldo + registra transazione income.
+    Tutto in unica transazione DB con FOR UPDATE su mittente e destinatario,
+    ordinati per id per evitare deadlock.
+    """
     data = request.get_json() or {}
     beneficiary = str(data.get("beneficiary", "")).strip()
-    iban   = str(data.get("iban", "")).strip().upper()
+    iban_raw = str(data.get("iban", "")).strip()
+    iban   = iban_normalize(iban_raw)
     reason = str(data.get("reason", "")).strip()
     amount = to_decimal(data.get("amount"), "0")
     if not beneficiary or not iban or not reason:
@@ -754,36 +864,82 @@ def api_transfer():
         return jsonify({"success": False, "message": "IBAN non valido"}), 400
     if amount <= Decimal("0"):
         return jsonify({"success": False, "message": "Importo non valido"}), 400
+
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("SELECT id, uid, nome, saldo, attiva FROM utenti WHERE id=%s FOR UPDATE",
-                    (g.user_id,))
-        u = cur.fetchone()
-        if not u or not u["attiva"]:
+        # 1) Identifica eventuale destinatario interno (senza lock)
+        cur.execute("SELECT id FROM utenti WHERE iban=%s", (iban,))
+        dest = cur.fetchone()
+        dest_id = int(dest["id"]) if dest else None
+
+        # Impedisci bonifici a se stessi (didattico: no-op che confonde)
+        if dest_id == g.user_id:
+            conn.rollback()
+            return jsonify({"success": False,
+                            "message": "Non puoi inviare un bonifico a te stesso"}), 400
+
+        # 2) Lock ordinato per evitare deadlock se entrambi interni
+        ids_da_bloccare = sorted({g.user_id, dest_id}) if dest_id else [g.user_id]
+        cur.execute(
+            f"SELECT id, uid, nome, saldo, attiva FROM utenti "
+            f"WHERE id = ANY(%s) ORDER BY id FOR UPDATE",
+            (ids_da_bloccare,))
+        rows = {row["id"]: row for row in cur.fetchall()}
+        mittente = rows.get(g.user_id)
+        if not mittente or not mittente["attiva"]:
             conn.rollback()
             return jsonify({"success": False, "message": "Utente non valido o carta bloccata"}), 403
-        saldo_prima = Decimal(str(u["saldo"]))
-        if saldo_prima < amount:
+
+        saldo_m_prima = Decimal(str(mittente["saldo"]))
+        if saldo_m_prima < amount:
             conn.rollback()
             return jsonify({"success": False, "message": "Fondi insufficienti"}), 400
-        saldo_dopo = saldo_prima - amount
-        cur.execute("UPDATE utenti SET saldo=%s WHERE id=%s", (saldo_dopo, g.user_id))
+
+        saldo_m_dopo = saldo_m_prima - amount
+
+        # 3) Scala il mittente
+        cur.execute("UPDATE utenti SET saldo=%s WHERE id=%s", (saldo_m_dopo, g.user_id))
+
+        # 4) Salva il bonifico
         cur.execute(
-            """INSERT INTO bonifici (id_utente, beneficiario, iban_destinatario, causale, importo, stato)
-               VALUES (%s,%s,%s,%s,%s,'COMPLETATO') RETURNING id, creato_il""",
-            (g.user_id, beneficiary, iban, reason, amount))
+            """INSERT INTO bonifici
+               (id_utente, beneficiario, iban_destinatario, causale, importo, stato, id_utente_riceve)
+               VALUES (%s,%s,%s,%s,%s,'COMPLETATO',%s)
+               RETURNING id, creato_il""",
+            (g.user_id, beneficiary, iban, reason, amount, dest_id))
         b = cur.fetchone()
+
+        # 5) Movimento del mittente (uscita)
         cur.execute(
             """INSERT INTO transazioni (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                importo, saldo_prima, saldo_dopo, esito)
                VALUES (%s,%s,%s,%s,'expense','transfer',%s,%s,%s,'APPROVATA')""",
-            (g.user_id, u["uid"], u["nome"], f"Bonifico a {beneficiary}",
-             amount, saldo_prima, saldo_dopo))
+            (g.user_id, mittente["uid"], mittente["nome"], f"Bonifico a {beneficiary}",
+             amount, saldo_m_prima, saldo_m_dopo))
+
+        # 6) Se destinatario interno: accredita e registra entrata
+        if dest_id:
+            dest_row = rows.get(dest_id)
+            saldo_d_prima = Decimal(str(dest_row["saldo"]))
+            saldo_d_dopo  = saldo_d_prima + amount
+            cur.execute("UPDATE utenti SET saldo=%s WHERE id=%s", (saldo_d_dopo, dest_id))
+            cur.execute(
+                """INSERT INTO transazioni (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
+                   importo, saldo_prima, saldo_dopo, esito)
+                   VALUES (%s,%s,%s,%s,'income','transfer',%s,%s,%s,'APPROVATA')""",
+                (dest_id, dest_row["uid"], dest_row["nome"],
+                 f"Bonifico da {mittente['nome']}",
+                 amount, saldo_d_prima, saldo_d_dopo))
+
         conn.commit()
-        return jsonify({"success": True, "transfer_id": b["id"],
-                        "created_at": b["creato_il"].isoformat(),
-                        "new_balance": float(saldo_dopo)})
+        return jsonify({
+            "success":     True,
+            "transfer_id": b["id"],
+            "created_at":  b["creato_il"].isoformat(),
+            "new_balance": float(saldo_m_dopo),
+            "internal":    dest_id is not None,
+        })
     except Exception:
         conn.rollback()
         return jsonify({"success": False, "message": "Errore interno"}), 500

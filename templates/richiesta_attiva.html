@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Pagamento in attesa - POS IoT{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Pagamento in attesa sul POS</h1>
+        <p class="subtitle">Il POS mostrerà la richiesta. Il cliente deve avvicinare la carta.</p>
+    </div>
+</div>
+<div class="qr-container">
+    <div class="qr-info">
+        <div class="qr-importo">{{ "%.2f"|format(richiesta.importo) }} EUR</div>
+        <div class="qr-meta">
+            <p><strong>Descrizione:</strong> {{ richiesta.descrizione }}</p>
+            <p><strong>Scadenza:</strong> 10 minuti</p>
+            <p><strong>Stato:</strong> <span class="badge pending" id="badge-stato">{{ richiesta.stato }}</span></p>
+        </div>
+        <div id="stato-live">In attesa che il cliente avvicini la carta al POS...</div>
+        <div class="qr-actions">
+            <form method="POST" action="{{ url_for('richiesta_annulla', id=richiesta.id) }}" id="form-annulla">
+                <button type="submit" class="btn danger">Annulla</button>
+            </form>
+            <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">Nuova richiesta</a>
+            <a href="{{ url_for('dashboard') }}" class="btn">Dashboard</a>
+        </div>
+    </div>
+</div>
+<script>
+    const badge = document.getElementById('badge-stato');
+    const statoLive = document.getElementById('stato-live');
+    const formAnnulla = document.getElementById('form-annulla');
+
+    async function controllaStato() {
+        try {
+            const resp = await fetch('/richiesta-pagamento/{{ richiesta.id }}/stato');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.stato === 'COMPLETATA') {
+                badge.className = 'badge success';
+                badge.textContent = 'COMPLETATA';
+                statoLive.textContent = 'Pagamento completato alle ' + data.data_completata;
+                formAnnulla.style.display = 'none';
+                clearInterval(intervallo);
+            } else if (data.stato === 'IN_CORSO') {
+                badge.className = 'badge warning';
+                badge.textContent = 'IN CORSO';
+                statoLive.textContent = 'Cliente sta inserendo la carta...';
+            } else if (data.stato === 'NEGATA') {
+                badge.className = 'badge error';
+                badge.textContent = 'NEGATA';
+                statoLive.textContent = 'Pagamento negato (fondi insufficienti)';
+                clearInterval(intervallo);
+            } else if (data.stato === 'ANNULLATA' || data.stato === 'SCADUTA') {
+                badge.className = 'badge muted';
+                badge.textContent = data.stato;
+                formAnnulla.style.display = 'none';
+                clearInterval(intervallo);
+            }
+        } catch (e) {}
+    }
+    const intervallo = setInterval(controllaStato, 2000);
+    controllaStato();
+</script>
+{% endblock %}
