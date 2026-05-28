@@ -636,11 +636,14 @@ form input:focus, form select:focus { outline: none; border-color: var(--primary
    LOGIN PAGE
 ═══════════════════════════════════════ */
 .login-page {
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
   display: grid;
   place-items: center;
   background: linear-gradient(145deg, #e0e7ff 0%, #f0f4ff 50%, #fdf4ff 100%);
   padding: 24px;
+  z-index: 10;
+  overflow-y: auto;
 }
 
 .login-card {
