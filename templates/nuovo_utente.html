@@ -7,23 +7,25 @@
     <h1>Registra nuovo cliente</h1>
     <p class="subtitle">Compila i dati e scansiona la carta NFC con il POS fisico</p>
   </div>
-  <a href="{{ url_for('utenti') }}" class="btn">← Torna alla lista</a>
+  <a href="{{ url_for('utenti') }}" class="btn">Torna alla lista</a>
 </div>
 
 <div class="card" style="max-width:520px;">
   {% if errore %}
-  <div class="alert error">⚠️ {{ errore }}</div>
+  <div class="alert error">{{ errore }}</div>
   {% endif %}
 
   <form method="POST" id="form-nuovo">
 
+    <!-- UID NFC -->
     <div class="form-group">
       <label class="form-label">UID carta NFC</label>
       <div class="uid-input-group">
         <input class="form-control" type="text" name="uid" id="uid-input"
                required placeholder="es. 584195345601" autocomplete="off">
         <button type="button" class="btn-nfc" id="btn-scan" onclick="avviaScan()">
-          📡 <span id="btn-scan-label">Scansiona con POS</span>
+          <i class="bi bi-broadcast"></i>
+          <span id="btn-scan-label">Scansiona</span>
         </button>
       </div>
       <div class="scan-status" id="scan-status">
@@ -32,17 +34,35 @@
       </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Nome e cognome</label>
-      <input class="form-control" type="text" name="nome" required placeholder="es. Mario Rossi">
+    <!-- Nome + Cognome separati -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Nome</label>
+        <input class="form-control" type="text" name="nome" required
+               placeholder="es. Mario">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cognome</label>
+        <input class="form-control" type="text" name="cognome" required
+               placeholder="es. Rossi">
+      </div>
     </div>
 
+    <!-- PIN con generazione automatica -->
     <div class="form-group">
       <label class="form-label">PIN (4 cifre)</label>
-      <input class="form-control" type="text" name="pin" required
-             pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="1234">
+      <div class="uid-input-group">
+        <input class="form-control" type="text" name="pin" id="pin-input" required
+               pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="1234">
+        <button type="button" class="btn-nfc" onclick="generaPin()">
+          <i class="bi bi-arrow-clockwise"></i>
+          <span>Genera</span>
+        </button>
+      </div>
+      <p class="form-hint" id="pin-hint" style="color:var(--warning);"></p>
     </div>
 
+    <!-- Saldo iniziale -->
     <div class="form-group">
       <label class="form-label">Saldo iniziale (EUR)</label>
       <input class="form-control" type="number" name="saldo"
@@ -51,38 +71,45 @@
 
     <div class="form-actions">
       <a href="{{ url_for('utenti') }}" class="btn">Annulla</a>
-      <button type="submit" class="btn primary">Registra cliente →</button>
+      <button type="submit" class="btn primary">Registra cliente</button>
     </div>
 
   </form>
 </div>
 
 <script>
+/* ── Genera PIN casuale ── */
+function generaPin() {
+  const pin  = String(Math.floor(Math.random() * 9000) + 1000);
+  document.getElementById('pin-input').value = pin;
+  const hint = document.getElementById('pin-hint');
+  hint.textContent = 'PIN generato: ' + pin + ' — comunicalo al cliente.';
+}
+
+/* ── Scansione NFC ── */
 let scanId = null;
 let pollInterval = null;
 
 async function avviaScan() {
-  const btn = document.getElementById('btn-scan');
-  const label = document.getElementById('btn-scan-label');
-  const status = document.getElementById('scan-status');
+  const btn     = document.getElementById('btn-scan');
+  const label   = document.getElementById('btn-scan-label');
+  const status  = document.getElementById('scan-status');
   const spinner = document.getElementById('scan-spinner');
-  const msg = document.getElementById('scan-msg');
-  const input = document.getElementById('uid-input');
+  const msg     = document.getElementById('scan-msg');
+  const input   = document.getElementById('uid-input');
 
-  // Avvia la scansione
   btn.classList.add('scanning');
   label.textContent = 'Annulla';
   btn.onclick = annullaScan;
   status.className = 'scan-status visible';
   spinner.style.display = 'block';
-  msg.textContent = 'Avvicina la carta NFC al POS fisico...';
+  msg.textContent = 'Avvicina la carta al POS fisico...';
 
   try {
     const resp = await fetch('/scan/start', { method: 'POST' });
     const data = await resp.json();
     scanId = data.id;
 
-    // Polling ogni 1.5s
     pollInterval = setInterval(async () => {
       try {
         const r = await fetch('/scan/stato/' + scanId);
@@ -90,10 +117,11 @@ async function avviaScan() {
         if (d.stato === 'DONE' && d.uid) {
           clearInterval(pollInterval);
           input.value = d.uid;
+          // Mostra il bottone "Ripeti" invece di bloccare
           btn.classList.remove('scanning');
           btn.classList.add('done');
-          label.textContent = 'UID acquisito ✓';
-          btn.onclick = null;
+          label.textContent = 'Ripeti';
+          btn.onclick = resetEScansiona;
           spinner.style.display = 'none';
           status.className = 'scan-status visible success';
           msg.textContent = 'UID acquisito: ' + d.uid;
@@ -103,10 +131,12 @@ async function avviaScan() {
           resetScan();
           status.className = 'scan-status visible error';
           spinner.style.display = 'none';
-          msg.textContent = d.stato === 'TIMEOUT' ? 'Timeout: nessuna carta rilevata.' : 'Scansione annullata.';
+          msg.textContent = d.stato === 'TIMEOUT'
+            ? 'Timeout: nessuna carta rilevata.'
+            : 'Scansione annullata.';
           scanId = null;
         }
-      } catch(e) { /* ignora errori di rete temporanei */ }
+      } catch(e) {}
     }, 1500);
 
   } catch(e) {
@@ -128,12 +158,19 @@ async function annullaScan() {
 }
 
 function resetScan() {
-  const btn = document.getElementById('btn-scan');
+  const btn   = document.getElementById('btn-scan');
   const label = document.getElementById('btn-scan-label');
   btn.className = 'btn-nfc';
   btn.onclick = avviaScan;
-  label.textContent = 'Scansiona con POS';
-  document.getElementById('scan-spinner').style.display = 'block';
+  label.textContent = 'Scansiona';
+}
+
+// Pulisce l'UID e riparte
+function resetEScansiona() {
+  document.getElementById('uid-input').value = '';
+  document.getElementById('scan-status').className = 'scan-status';
+  resetScan();
+  avviaScan();
 }
 </script>
 {% endblock %}

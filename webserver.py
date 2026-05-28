@@ -373,27 +373,32 @@ def dashboard():
 @app.route("/utenti")
 @admin_richiesto
 def utenti():
-    # Solo admin, solo ID e nome (privacy: nessun saldo, nessun IBAN, nessuno storico)
     cerca = request.args.get("q", "").strip()
     if cerca:
-        lista = query("SELECT id, nome FROM utenti WHERE LOWER(nome) LIKE %s ORDER BY nome",
-                      (f"%{cerca.lower()}%",), fetch=True)
+        lista = query(
+            "SELECT id, nome, username, iban FROM utenti WHERE LOWER(nome) LIKE %s ORDER BY nome",
+            (f"%{cerca.lower()}%",), fetch=True)
     else:
-        lista = query("SELECT id, nome FROM utenti ORDER BY nome", fetch=True)
+        lista = query(
+            "SELECT id, nome, username, iban FROM utenti ORDER BY nome",
+            fetch=True)
     return render_template("utenti.html", utenti=lista, cerca=cerca)
-
 
 @app.route("/utenti/nuovo", methods=["GET", "POST"])
 @login_richiesto
 def nuovo_utente():
     errore = None
     if request.method == "POST":
-        uid   = request.form.get("uid", "").strip()
-        nome  = request.form.get("nome", "").strip()
-        pin   = request.form.get("pin", "").strip()
-        saldo = request.form.get("saldo", "0").strip()
-        if not uid or not nome:
-            errore = "UID e nome sono obbligatori"
+        uid     = request.form.get("uid", "").strip()
+        nome    = request.form.get("nome", "").strip()
+        cognome = request.form.get("cognome", "").strip()
+        pin     = request.form.get("pin", "").strip()
+        saldo   = request.form.get("saldo", "0").strip()
+ 
+        nome_completo = f"{nome} {cognome}".strip()
+ 
+        if not uid or not nome or not cognome:
+            errore = "UID, nome e cognome sono obbligatori"
         elif len(pin) != 4 or not pin.isdigit():
             errore = "Il PIN deve essere 4 cifre numeriche"
         else:
@@ -403,27 +408,33 @@ def nuovo_utente():
                     raise ValueError()
             except (ValueError, InvalidOperation):
                 errore = "Saldo non valido"
+ 
         if errore is None:
             if query("SELECT id FROM utenti WHERE uid=%s", (uid,), fetch=True, one=True):
-                errore = "Esiste gia un utente con questo UID"
+                errore = "Esiste già un utente con questo UID"
             else:
-                username = nome.lower().replace(" ", ".").replace("'", "")
-                base_username = username
+                # Username: nome.cognome (es. mario.rossi)
+                base_username = f"{nome.lower()}.{cognome.lower()}".replace("'", "").replace(" ", "")
+                username = base_username
                 contatore = 1
                 while query("SELECT id FROM utenti WHERE username=%s",
                             (username,), fetch=True, one=True):
                     contatore += 1
                     username = f"{base_username}{contatore}"
-                # Inserisci utente, recupera id e genera IBAN deterministico
+ 
                 row = query(
-                    """INSERT INTO utenti (uid, nome, pin_hash, saldo, attiva, username, password_hash)
+                    """INSERT INTO utenti
+                       (uid, nome, pin_hash, saldo, attiva, username, password_hash)
                        VALUES (%s, %s, %s, %s, TRUE, %s, %s) RETURNING id""",
-                    (uid, nome, hash_pin(pin), saldo_n, username, ph.hash("password123")),
+                    (uid, nome_completo, hash_pin(pin), saldo_n,
+                     username, ph.hash("password123")),
                     fetch=True, one=True,
                 )
                 new_id = row["id"]
-                query("UPDATE utenti SET iban=%s WHERE id=%s", (genera_iban(new_id), new_id))
-                return redirect(url_for("dashboard"))
+                query("UPDATE utenti SET iban=%s WHERE id=%s",
+                      (genera_iban(new_id), new_id))
+                return redirect(url_for("utenti"))
+ 
     return render_template("nuovo_utente.html", errore=errore)
 
 @app.route("/scan/start", methods=["POST"])
