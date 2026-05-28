@@ -16,7 +16,7 @@
       <li><span class="meta-key">Stato</span>
         <span class="badge pending" id="badge-stato">{{ ricarica.stato }}</span></li>
     </ul>
-    <div class="status-box" id="stato-live">⏳ In attesa di scansione...</div>
+    <div class="status-box" id="stato-live">In attesa di scansione...</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
       <form method="POST" action="{{ url_for('qr_annulla', token=token) }}" id="form-annulla">
         <button type="submit" class="btn danger">✕ Annulla QR</button>
@@ -41,7 +41,7 @@ async function poll() {
     const d = await r.json();
     if (d.stato === 'COMPLETATA') {
       badge.className = 'badge success'; badge.textContent = 'COMPLETATA';
-      box.className = 'status-box done'; box.textContent = '✅ Ricarica completata alle ' + d.data_completata;
+      box.className = 'status-box done'; box.textContent = 'Ricarica completata alle ' + d.data_completata;
       form.style.display = 'none'; clearInterval(iv);
     } else if (d.stato === 'ANNULLATA' || d.stato === 'SCADUTA') {
       badge.className = 'badge error'; badge.textContent = d.stato;
