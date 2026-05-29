@@ -66,6 +66,8 @@ def inizializza():
     cur = conn.cursor()
 
     # Pulizia in ordine inverso per le foreign key
+    cur.execute("DROP TABLE IF EXISTS scan_nfc")
+    cur.execute("DROP TABLE IF EXISTS richieste_pagamento")
     cur.execute("DROP TABLE IF EXISTS revoked_access_tokens")
     cur.execute("DROP TABLE IF EXISTS refresh_tokens")
     cur.execute("DROP TABLE IF EXISTS bonifici")
