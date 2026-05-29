@@ -426,10 +426,14 @@ def logout():
 @app.route("/dashboard")
 @login_richiesto
 def dashboard():
+    pending_proprie = query(
+        "SELECT COUNT(*) AS n FROM ricariche WHERE id_esercente=%s AND stato='PENDING' AND scadenza > NOW()",
+        (session["esercente_id"],), fetch=True, one=True)["n"]
     if session.get("ruolo") == "admin":
         return render_template(
             "dashboard.html",
             modalita="admin",
+            pending_proprie=pending_proprie,
             num_utenti=query("SELECT COUNT(*) AS n FROM utenti", fetch=True, one=True)[
                 "n"
             ],
@@ -686,7 +690,7 @@ def qr_annulla(token):
         "UPDATE ricariche SET stato='ANNULLATA' WHERE token=%s AND id_esercente=%s AND stato='PENDING'",
         (token, session["esercente_id"]),
     )
-    return redirect(url_for("ricariche"))
+    return redirect(url_for("ricariche") + "?stato=PENDING")
 
 
 @app.route("/ricariche")

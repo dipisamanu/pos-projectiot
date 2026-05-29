@@ -22,7 +22,7 @@
         <button type="submit" class="btn danger">✕ Annulla QR</button>
       </form>
       <a href="{{ url_for('ricarica') }}" class="btn primary">+ Nuova ricarica</a>
-      <a href="{{ url_for('dashboard') }}" class="btn">Dashboard</a>
+      <a href="{{ url_for('ricariche') }}?stato=PENDING" class="btn">Torna ai QR</a>
     </div>
   </div>
   <div class="qr-frame">

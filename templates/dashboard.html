@@ -33,6 +33,17 @@
   </div>
 </div>
 
+{% if pending_proprie > 0 %}
+<div class="alert info" style="margin-bottom:24px;">
+  <i class="bi bi-qr-code"></i>
+  Hai <strong>{{ pending_proprie }} QR</strong> ancora attivi.
+  <a href="{{ url_for('ricariche') }}?stato=PENDING"
+     style="margin-left:8px;font-weight:600;color:var(--info);">
+    Visualizza <i class="bi bi-arrow-right"></i>
+  </a>
+</div>
+{% endif %}
+
 <h2>Operazioni rapide</h2>
 <div class="action-grid">
   <a href="{{ url_for('richiesta_pagamento') }}" class="action-card">
@@ -44,6 +55,20 @@
     <span class="action-icon"><i class="bi bi-lightning-charge-fill"></i></span>
     <h3>Nuova ricarica QR</h3>
     <p>Genera un QR code per ricaricare il conto di un cliente</p>
+  </a>
+  <a href="{{ url_for('ricariche') }}" class="action-card">
+    <span class="action-icon"><i class="bi bi-folder-fill"></i></span>
+    <h3>Storico ricariche</h3>
+    <p>Visualizza tutte le tue ricariche</p>
+  </a>
+  <a href="{{ url_for('ricariche') }}?stato=PENDING" class="action-card">
+    <span class="action-icon"><i class="bi bi-qr-code"></i></span>
+    <h3>QR in attesa
+      {% if pending_proprie > 0 %}
+        <span class="badge pending" style="margin-left:6px;vertical-align:middle;">{{ pending_proprie }}</span>
+      {% endif %}
+    </h3>
+    <p>QR generati non ancora scansionati</p>
   </a>
   <a href="{{ url_for('utenti') }}" class="action-card">
     <span class="action-icon"><i class="bi bi-people-fill"></i></span>
@@ -92,7 +117,8 @@
 <div class="alert info" style="margin-bottom:24px;">
   <i class="bi bi-qr-code"></i>
   Hai <strong>{{ pending_proprie }} QR</strong> ancora attivi.
-  <a href="{{ url_for('ricariche') }}?stato=PENDING" style="margin-left:8px;font-weight:600;color:var(--info);">
+  <a href="{{ url_for('ricariche') }}?stato=PENDING"
+     style="margin-left:8px;font-weight:600;color:var(--info);">
     Visualizza <i class="bi bi-arrow-right"></i>
   </a>
 </div>
@@ -122,7 +148,7 @@
         <span class="badge pending" style="margin-left:6px;vertical-align:middle;">{{ pending_proprie }}</span>
       {% endif %}
     </h3>
-    <p>QR generati non ancora scansionati o scaduti</p>
+    <p>QR generati non ancora scansionati</p>
   </a>
   <a href="{{ url_for('nuovo_utente') }}" class="action-card">
     <span class="action-icon"><i class="bi bi-plus-circle-fill"></i></span>

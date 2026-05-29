@@ -53,7 +53,9 @@
       <label class="form-label">PIN (4 cifre)</label>
       <div class="uid-input-group">
         <input class="form-control" type="text" name="pin" id="pin-input" required
-               pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="1234">
+        pattern="[0-9]{4}" maxlength="4" inputmode="numeric"
+        placeholder="Clicca Genera →" readonly
+        style="background:var(--surface-alt);cursor:not-allowed;">
         <button type="button" class="btn-nfc" onclick="generaPin()">
           <i class="bi bi-arrow-clockwise"></i>
           <span>Genera</span>
