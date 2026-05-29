@@ -83,7 +83,7 @@ ngrok http 5000
 
 | Tabella | Scopo |
 |---|---|
-| `utenti` | Clienti finali: UID carta, PIN (SHA256), saldo, IBAN deterministico, credenziali app (Argon2) |
+| `utenti` | Clienti finali: UID carta, PIN (Argon2), saldo, IBAN deterministico, credenziali app (Argon2) |
 | `esercenti` | Login sito: ruolo `admin` o `esercente` |
 | `transazioni` | Movimenti per utente con tipo (income/expense), categoria, esito |
 | `ricariche` | QR generati dagli esercenti (stato: PENDING/COMPLETATA/SCADUTA/ANNULLATA) |
