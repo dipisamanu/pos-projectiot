@@ -279,7 +279,7 @@ def inserisci_pin():
 # ============================================================
 
 
-def leggi_carta_timeout(secondi=60):
+def leggi_carta_timeout(secondi=120):
     fine = time.time() + secondi
     while time.time() < fine:
         uid, _ = reader.read_no_block()
