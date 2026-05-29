@@ -6,12 +6,37 @@
     <h1>Storico ricariche</h1>
     <p class="subtitle">L'identità di chi ha completato le ricariche non è mostrata per tutelare la privacy.</p>
   </div>
-  <a href="{{ url_for('ricarica') }}" class="btn primary">⚡ Nuova ricarica</a>
+  <a href="{{ url_for('ricarica') }}" class="btn primary">Nuova ricarica</a>
 </div>
+
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+  <a href="{{ url_for('ricariche') }}"
+     class="btn {% if not stato_filtro %}primary{% endif %} sm">Tutte</a>
+  <a href="{{ url_for('ricariche') }}?stato=PENDING"
+     class="btn {% if stato_filtro == 'PENDING' %}primary{% endif %} sm">
+    In attesa
+    {% if pending_count > 0 %}<span class="badge pending" style="margin-left:4px;">{{ pending_count }}</span>{% endif %}
+  </a>
+  <a href="{{ url_for('ricariche') }}?stato=COMPLETATA"
+     class="btn {% if stato_filtro == 'COMPLETATA' %}primary{% endif %} sm">Completate</a>
+  <a href="{{ url_for('ricariche') }}?stato=SCADUTA"
+     class="btn {% if stato_filtro == 'SCADUTA' %}primary{% endif %} sm">Scadute</a>
+  <a href="{{ url_for('ricariche') }}?stato=ANNULLATA"
+     class="btn {% if stato_filtro == 'ANNULLATA' %}primary{% endif %} sm">Annullate</a>
+</div>
+
 <div class="table-wrapper">
   <table class="data-table">
     <thead>
-      <tr><th>#ID</th><th>Data creazione</th><th>Importo</th><th>Completata</th><th>Stato</th></tr>
+      <tr>
+        <th>ID</th>
+        <th>Data creazione</th>
+        <th>Importo</th>
+        <th>Validità</th>
+        <th>Completata</th>
+        <th>Stato</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
       {% for r in ricariche %}
@@ -19,17 +44,90 @@
         <td class="mono">#{{ "%05d"|format(r.id) }}</td>
         <td>{{ r.data_creazione.strftime('%d/%m/%Y %H:%M') }}</td>
         <td class="amount">{{ "%.2f"|format(r.importo) }} EUR</td>
+        <td>
+          {% if r.stato == 'PENDING' %}
+            {# timestamp ISO passato al JS per il countdown #}
+            <span class="countdown"
+                  data-scadenza="{{ r.scadenza.strftime('%Y-%m-%dT%H:%M:%S') }}"
+                  style="font-variant-numeric:tabular-nums;font-size:13px;">
+            </span>
+          {% elif r.stato == 'COMPLETATA' %}
+            <span style="color:var(--text-muted);font-size:12px;">
+              {{ r.data_creazione.strftime('%H:%M') }} → {{ r.data_completata.strftime('%H:%M') if r.data_completata else '—' }}
+            </span>
+          {% else %}
+            <span style="color:var(--text-muted);font-size:12px;">
+              Scad. {{ r.scadenza.strftime('%H:%M:%S') }}
+            </span>
+          {% endif %}
+        </td>
         <td>{{ r.data_completata.strftime('%d/%m %H:%M') if r.data_completata else '—' }}</td>
         <td>
           {% if r.stato == 'COMPLETATA' %}<span class="badge success">{{ r.stato }}</span>
-          {% elif r.stato == 'PENDING' %}<span class="badge pending">{{ r.stato }}</span>
+          {% elif r.stato == 'PENDING' %}<span class="badge pending" id="badge-{{ r.id }}">{{ r.stato }}</span>
+          {% elif r.stato == 'SCADUTA' %}<span class="badge error">{{ r.stato }}</span>
           {% else %}<span class="badge muted">{{ r.stato }}</span>{% endif %}
+        </td>
+        <td>
+          {% if r.stato == 'PENDING' %}
+          <a href="{{ url_for('qr_attivo', token=r.token) }}"
+             class="btn sm primary" style="white-space:nowrap;">
+            <i class="bi bi-qr-code"></i> Mostra QR
+          </a>
+          {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="5" class="empty">Nessuna ricarica generata</td></tr>
+      <tr>
+        <td colspan="7" class="empty">
+          Nessuna ricarica{% if stato_filtro %} con stato {{ stato_filtro }}{% endif %}
+        </td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+function aggiorna() {
+  const ora = new Date();
+  document.querySelectorAll('.countdown').forEach(el => {
+    const scadenza = new Date(el.dataset.scadenza);
+    const diff = Math.floor((scadenza - ora) / 1000);
+
+    if (diff <= 0) {
+      el.textContent = 'Scaduto';
+      el.style.color = 'var(--danger)';
+      el.style.fontWeight = '600';
+      // Ricarica la pagina dopo 1.5s così il DB è aggiornato
+      setTimeout(() => location.reload(), 1500);
+      const riga = el.closest('tr');
+      if (riga) {
+        const badge = riga.querySelector('.badge.pending');
+        if (badge) {
+          badge.className = 'badge error';
+          badge.textContent = 'SCADUTA';
+        }
+        const btn = riga.querySelector('.btn.primary');
+        if (btn) btn.style.display = 'none';
+      }
+      return;
+    }
+
+    const min = Math.floor(diff / 60);
+    const sec = diff % 60;
+    el.textContent = min > 0
+      ? `${min}m ${String(sec).padStart(2, '0')}s`
+      : `${sec}s`;
+
+    // colore progressivo: verde → arancione → rosso
+    if (diff > 120)      el.style.color = 'var(--success)';
+    else if (diff > 30)  el.style.color = 'var(--warning)';
+    else                 el.style.color = 'var(--danger)';
+  });
+}
+
+aggiorna();
+setInterval(aggiorna, 1000);
+</script>
 {% endblock %}

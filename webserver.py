@@ -251,7 +251,7 @@ def hash_refresh_token(token):
 
 
 def create_access_token(user_id):
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     payload = {
         "sub": str(user_id),
         "type": "access",
@@ -265,7 +265,7 @@ def create_access_token(user_id):
 def create_refresh_token(user_id):
     raw = secrets.token_urlsafe(48)
     token_hash = hash_refresh_token(raw)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS)
+    expires_at = datetime.now() + timedelta(days=REFRESH_TOKEN_DAYS)
     query(
         "INSERT INTO refresh_tokens (user_id, token_hash, expires_at, revoked) VALUES (%s, %s, %s, FALSE)",
         (user_id, token_hash, expires_at),
@@ -587,7 +587,7 @@ def scan_stato(scan_id):
     if not row:
         return jsonify({"stato": "NON_TROVATA"}), 404
     # Controlla scadenza
-    if row["stato"] == "WAITING" and row["scadenza"] < datetime.now(timezone.utc):
+    if row["stato"] == "WAITING" and row["scadenza"] < datetime.now():
         query("UPDATE scan_nfc SET stato='TIMEOUT' WHERE id=%s", (scan_id,))
         return jsonify({"stato": "TIMEOUT", "uid": None})
     return jsonify({"stato": row["stato"], "uid": row["uid"]})
@@ -627,7 +627,7 @@ def ricarica():
             errore = "Importo non valido"
             return render_template("ricarica.html", errore=errore)
         token = secrets.token_urlsafe(16)
-        scadenza = datetime.now(timezone.utc) + timedelta(seconds=QR_VALIDITA_SECONDI)
+        scadenza = datetime.now() + timedelta(seconds=QR_VALIDITA_SECONDI)
         query(
             "INSERT INTO ricariche (token, id_esercente, importo, scadenza) VALUES (%s, %s, %s, %s)",
             (token, session["esercente_id"], importo, scadenza),
@@ -692,15 +692,29 @@ def qr_annulla(token):
 @app.route("/ricariche")
 @login_richiesto
 def ricariche():
-    lista = query(
-        """SELECT id, token, importo, stato, data_creazione, data_completata, scadenza
-           FROM ricariche WHERE id_esercente=%s
-           ORDER BY data_creazione DESC LIMIT 100""",
-        (session["esercente_id"],),
-        fetch=True,
+    query(
+        """UPDATE ricariche SET stato='SCADUTA'
+           WHERE id_esercente=%s AND stato='PENDING' AND scadenza < NOW()""",
+        (session["esercente_id"],)
     )
-    return render_template("ricariche.html", ricariche=lista)
-
+    stato_filtro = request.args.get("stato", "").strip().upper() or None
+    if stato_filtro:
+        lista = query(
+            """SELECT id, token, importo, stato, data_creazione, data_completata, scadenza
+               FROM ricariche WHERE id_esercente=%s AND stato=%s
+               ORDER BY data_creazione DESC LIMIT 100""",
+            (session["esercente_id"], stato_filtro), fetch=True)
+    else:
+        lista = query(
+            """SELECT id, token, importo, stato, data_creazione, data_completata, scadenza
+               FROM ricariche WHERE id_esercente=%s
+               ORDER BY data_creazione DESC LIMIT 100""",
+            (session["esercente_id"],), fetch=True)
+    pending_count = query(
+        "SELECT COUNT(*) AS n FROM ricariche WHERE id_esercente=%s AND stato='PENDING' AND scadenza > NOW()",
+        (session["esercente_id"],), fetch=True, one=True)["n"]
+    return render_template("ricariche.html", ricariche=lista,
+                           stato_filtro=stato_filtro, pending_count=pending_count)
 
 @app.route("/richiesta-pagamento", methods=["GET", "POST"])
 @login_richiesto
@@ -717,7 +731,7 @@ def richiesta_pagamento():
         descrizione = (
             request.form.get("descrizione", "Pagamento POS").strip() or "Pagamento POS"
         )
-        scadenza = datetime.now(timezone.utc) + timedelta(minutes=10)
+        scadenza = datetime.now() + timedelta(minutes=10)
         row = query(
             """INSERT INTO richieste_pagamento (id_esercente, importo, descrizione, scadenza)
                VALUES (%s, %s, %s, %s) RETURNING id""",
@@ -811,7 +825,7 @@ def pay_cliente(token):
         return render_template(
             "pay_cliente.html", errore="Ricarica gia completata o annullata", ricarica=r
         )
-    if r["scadenza"] < datetime.now(timezone.utc):
+    if r["scadenza"] < datetime.now():
         query("UPDATE ricariche SET stato='SCADUTA' WHERE id=%s", (r["id"],))
         return render_template(
             "pay_cliente.html", errore="Ricarica scaduta", ricarica=r
@@ -921,7 +935,7 @@ def api_refresh():
     )
     if not row or row["revoked"]:
         return jsonify({"success": False, "message": "Refresh token non valido"}), 401
-    if row["expires_at"] < datetime.now(timezone.utc):
+    if row["expires_at"] < datetime.now():
         return jsonify({"success": False, "message": "Refresh token scaduto"}), 401
     query(
         "UPDATE refresh_tokens SET revoked=TRUE, revoked_at=NOW(), last_used_at=NOW() WHERE id=%s",
@@ -1043,7 +1057,7 @@ def api_qr_info(token):
         return jsonify({"success": False, "message": "QR non trovato"}), 404
     if r["stato"] != "PENDING":
         return jsonify({"success": False, "message": "QR non disponibile"}), 400
-    if r["scadenza"] < datetime.now(timezone.utc):
+    if r["scadenza"] < datetime.now():
         query("UPDATE ricariche SET stato='SCADUTA' WHERE id=%s", (r["id"],))
         return jsonify({"success": False, "message": "QR scaduto"}), 400
     return jsonify({"amount": float(r["importo"]), "merchant_name": r["nome_negozio"]})
@@ -1083,7 +1097,7 @@ def api_qr_confirm():
                 return jsonify({"success": False, "message": "QR non trovato"}), 404
             if r["stato"] != "PENDING":
                 return jsonify({"success": False, "message": "QR non disponibile"}), 400
-            if r["scadenza"] < datetime.now(timezone.utc):
+            if r["scadenza"] < datetime.now():
                 cur.execute(
                     "UPDATE ricariche SET stato='SCADUTA' WHERE id=%s", (r["id"],)
                 )

@@ -65,7 +65,7 @@
 {% else %}
 <div class="page-header">
   <div>
-    <h1>Ciao, {{ esercente_nome }} <i class="bi bi-hand-wave-fill"></i></h1>
+    <h1>Ciao, {{ esercente_nome }}</h1>
     <p class="subtitle">Riepilogo delle tue operazioni</p>
   </div>
 </div>
@@ -78,7 +78,7 @@
   </div>
   <div class="stat-card">
     <div class="stat-accent"><i class="bi bi-cash-coin"></i></div>
-    <div class="stat-num">{{ "%.0f"|format(tot_proprie) }}</div>
+    <div class="stat-num">{{ "%.0f"|format(tot_proprie) }}€</div>
     <div class="stat-label">EUR totali ricaricati</div>
   </div>
   <div class="stat-card warning">
@@ -87,6 +87,16 @@
     <div class="stat-label">QR in attesa</div>
   </div>
 </div>
+
+{% if pending_proprie > 0 %}
+<div class="alert info" style="margin-bottom:24px;">
+  <i class="bi bi-qr-code"></i>
+  Hai <strong>{{ pending_proprie }} QR</strong> ancora attivi.
+  <a href="{{ url_for('ricariche') }}?stato=PENDING" style="margin-left:8px;font-weight:600;color:var(--info);">
+    Visualizza <i class="bi bi-arrow-right"></i>
+  </a>
+</div>
+{% endif %}
 
 <h2>Cosa vuoi fare?</h2>
 <div class="action-grid">
@@ -104,6 +114,15 @@
     <span class="action-icon"><i class="bi bi-folder-fill"></i></span>
     <h3>Storico ricariche</h3>
     <p>Visualizza tutte le tue ricariche</p>
+  </a>
+  <a href="{{ url_for('ricariche') }}?stato=PENDING" class="action-card">
+    <span class="action-icon"><i class="bi bi-qr-code"></i></span>
+    <h3>QR in attesa
+      {% if pending_proprie > 0 %}
+        <span class="badge pending" style="margin-left:6px;vertical-align:middle;">{{ pending_proprie }}</span>
+      {% endif %}
+    </h3>
+    <p>QR generati non ancora scansionati o scaduti</p>
   </a>
   <a href="{{ url_for('nuovo_utente') }}" class="action-card">
     <span class="action-icon"><i class="bi bi-plus-circle-fill"></i></span>
