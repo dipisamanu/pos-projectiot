@@ -4,10 +4,9 @@ Inizializza database POS IoT
 - Tabelle: utenti, esercenti, transazioni, ricariche, bonifici,
   refresh_tokens, revoked_access_tokens
 - IBAN deterministico per utenti (IT60POS + id zero-paddato 14 cifre)
-- Password Argon2, PIN SHA256
+- Password e PIN Argon2
 """
 
-import hashlib
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -20,9 +19,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 DB_CONFIG = {
-    "host":     os.getenv("DB_HOST", "localhost"),
+    "host": os.getenv("DB_HOST", "localhost"),
     "database": os.getenv("DB_NAME", "iot_db"),
-    "user":     os.getenv("DB_USER", "admin"),
+    "user": os.getenv("DB_USER", "admin"),
     "password": os.getenv("DB_PASSWORD", ""),
 }
 
@@ -30,16 +29,26 @@ if not DB_CONFIG["password"]:
     raise RuntimeError("DB_PASSWORD non impostata nel file .env")
 
 CATEGORIE_VALIDE = {
-    "shopping", "transport", "food", "entertainment", "health", "travel",
-    "utilities", "salary", "transfer", "education", "subscriptions", "other"
+    "shopping",
+    "transport",
+    "food",
+    "entertainment",
+    "health",
+    "travel",
+    "utilities",
+    "salary",
+    "transfer",
+    "education",
+    "subscriptions",
+    "other",
 }
 
 ph = PasswordHasher()
 
 
 def hash_pin(pin: str) -> str:
-    # PIN della carta NFC: SHA256 (4 cifre, basta)
-    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
+    # PIN della carta NFC: Argon2 (salted, resistente a rainbow table)
+    return ph.hash(pin)
 
 
 def hash_password(password: str) -> str:
@@ -172,9 +181,30 @@ def inizializza():
 
     # Seed utenti (clienti app) + generazione IBAN deterministico
     utenti_seed = [
-        ("584195345601", "Mario Rossi",  "1234", Decimal("2450.00"), "mario.rossi",  "password123"),
-        ("111222333444", "Luca Bianchi", "5678", Decimal("980.20"),  "luca.bianchi", "password123"),
-        ("555666777888", "Anna Verdi",   "0000", Decimal("5270.55"), "anna.verdi",   "password123"),
+        (
+            "584195345601",
+            "Mario Rossi",
+            "1234",
+            Decimal("2450.00"),
+            "mario.rossi",
+            "password123",
+        ),
+        (
+            "111222333444",
+            "Luca Bianchi",
+            "5678",
+            Decimal("980.20"),
+            "luca.bianchi",
+            "password123",
+        ),
+        (
+            "555666777888",
+            "Anna Verdi",
+            "0000",
+            Decimal("5270.55"),
+            "anna.verdi",
+            "password123",
+        ),
     ]
     for uid, nome, pin, saldo, username, pwd in utenti_seed:
         cur.execute(
@@ -185,13 +215,15 @@ def inizializza():
         new_id = cur.fetchone()[0]
         iban = genera_iban(new_id)
         cur.execute("UPDATE utenti SET iban=%s WHERE id=%s", (iban, new_id))
-        print(f"Utente inserito: {nome} (login: {username} / password123) - IBAN: {iban}")
+        print(
+            f"Utente inserito: {nome} (login: {username} / password123) - IBAN: {iban}"
+        )
 
     # Seed esercenti (login sito)
     esercenti = [
         ("admin", "admin123", "Amministratore", "admin"),
-        ("mario", "mario123", "Bar Mario",      "esercente"),
-        ("luca",  "luca123",  "Pizzeria Luca",  "esercente"),
+        ("mario", "mario123", "Bar Mario", "esercente"),
+        ("luca", "luca123", "Pizzeria Luca", "esercente"),
     ]
     for username, password, nome_negozio, ruolo in esercenti:
         cur.execute(
@@ -208,18 +240,18 @@ def inizializza():
         id_u, uid_u, nome_u, saldo = mario
         saldo = Decimal(saldo)
         demo = [
-            ("Accredito Stipendio Maggio", "income",  "salary",        Decimal("2620.00")),
-            ("LIDL",                       "expense", "food",          Decimal("64.30")),
-            ("Benzina Eni",                "expense", "transport",     Decimal("50.00")),
-            ("Netflix Monthly",            "expense", "subscriptions", Decimal("17.99")),
-            ("Amazon Shopping",            "expense", "shopping",      Decimal("124.50")),
-            ("Cena Sushi",                 "expense", "food",          Decimal("45.00")),
-            ("Rimborso Spese",             "income",  "transfer",      Decimal("120.00")),
-            ("Palestra",                   "expense", "health",        Decimal("55.00")),
-            ("Cinema UCI",                 "expense", "entertainment", Decimal("12.50")),
-            ("Bolletta Enel",              "expense", "utilities",     Decimal("89.20")),
-            ("Corso Udemy",                "expense", "education",     Decimal("19.99")),
-            ("Volo Ryanair",               "expense", "travel",        Decimal("85.00")),
+            ("Accredito Stipendio Maggio", "income", "salary", Decimal("2620.00")),
+            ("LIDL", "expense", "food", Decimal("64.30")),
+            ("Benzina Eni", "expense", "transport", Decimal("50.00")),
+            ("Netflix Monthly", "expense", "subscriptions", Decimal("17.99")),
+            ("Amazon Shopping", "expense", "shopping", Decimal("124.50")),
+            ("Cena Sushi", "expense", "food", Decimal("45.00")),
+            ("Rimborso Spese", "income", "transfer", Decimal("120.00")),
+            ("Palestra", "expense", "health", Decimal("55.00")),
+            ("Cinema UCI", "expense", "entertainment", Decimal("12.50")),
+            ("Bolletta Enel", "expense", "utilities", Decimal("89.20")),
+            ("Corso Udemy", "expense", "education", Decimal("19.99")),
+            ("Volo Ryanair", "expense", "travel", Decimal("85.00")),
         ]
         for i, (titolo, tipo, categoria, importo) in enumerate(demo):
             saldo_prima = saldo
@@ -229,8 +261,18 @@ def inizializza():
                    (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                     importo, saldo_prima, saldo_dopo, esito, data_ora)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'APPROVATA',%s)""",
-                (id_u, uid_u, nome_u, titolo, tipo, categoria,
-                 importo, saldo_prima, saldo, datetime.now() - timedelta(days=i * 2)),
+                (
+                    id_u,
+                    uid_u,
+                    nome_u,
+                    titolo,
+                    tipo,
+                    categoria,
+                    importo,
+                    saldo_prima,
+                    saldo,
+                    datetime.now() - timedelta(days=i * 2),
+                ),
             )
         cur.execute("UPDATE utenti SET saldo=%s WHERE id=%s", (saldo, id_u))
         print(f"Inserite {len(demo)} transazioni demo per Mario Rossi")
