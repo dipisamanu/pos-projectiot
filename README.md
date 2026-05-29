@@ -31,7 +31,6 @@ Sistema bancario didattico composto da tre parti:
 - **Python** 3.14.x, **Flask** 3.x, **PostgreSQL** 17
 - **JWT**: access token (durata configurabile) + refresh token (14 giorni) con blacklist su DB
 - **Argon2** per password account e PIN carta (4 cifre, compatibile col lettore fisico)
-- **Flask-Limiter** per anti-bruteforce sul login
 
 ## Setup
 
