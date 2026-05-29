@@ -3,34 +3,189 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Storico pagamenti POS</h1>
-    <p class="subtitle">Tutte le richieste di pagamento inviate al terminale fisico.</p>
+    <h1>Pagamenti POS</h1>
+    <p class="subtitle">Richieste di pagamento inviate al terminale fisico.</p>
   </div>
-  <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">+ Nuova richiesta</a>
+  <a href="{{ url_for('richiesta_pagamento') }}" class="btn primary">Nuova richiesta</a>
 </div>
+
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+  <a href="{{ url_for('pagamenti') }}"
+     class="btn {% if not stato_filtro %}primary{% endif %} sm">Tutti</a>
+  <a href="{{ url_for('pagamenti') }}?stato=PENDING"
+     class="btn {% if stato_filtro == 'PENDING' %}primary{% endif %} sm">
+    In attesa
+    {% if pending_count > 0 %}
+      <span class="badge pending" style="margin-left:4px;">{{ pending_count }}</span>
+    {% endif %}
+  </a>
+  <a href="{{ url_for('pagamenti') }}?stato=IN_CORSO"
+     class="btn {% if stato_filtro == 'IN_CORSO' %}primary{% endif %} sm">In corso</a>
+  <a href="{{ url_for('pagamenti') }}?stato=COMPLETATA"
+     class="btn {% if stato_filtro == 'COMPLETATA' %}primary{% endif %} sm">Completati</a>
+  <a href="{{ url_for('pagamenti') }}?stato=NEGATA"
+     class="btn {% if stato_filtro == 'NEGATA' %}primary{% endif %} sm">Negati</a>
+  <a href="{{ url_for('pagamenti') }}?stato=ANNULLATA"
+     class="btn {% if stato_filtro == 'ANNULLATA' %}primary{% endif %} sm">Annullati</a>
+</div>
+
 <div class="table-wrapper">
   <table class="data-table">
     <thead>
-      <tr><th>#ID</th><th>Descrizione</th><th>Importo</th><th>Data</th><th>Completata</th><th>Stato</th></tr>
+      <tr>
+        <th>ID</th>
+        <th>Descrizione</th>
+        <th>Importo</th>
+        <th>Data</th>
+        <th>Validità</th>
+        <th>Stato</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
+      {% set stati_attivi = ['PENDING', 'IN_CORSO', 'CARTA_LETTA', 'ELABORAZIONE'] %}
       {% for p in pagamenti %}
-      <tr>
+      <tr id="riga-{{ p.id }}"
+          {% if p.stato in stati_attivi %}data-attivo="{{ p.id }}"{% endif %}>
         <td class="mono">#{{ "%05d"|format(p.id) }}</td>
         <td>{{ p.descrizione }}</td>
         <td class="amount">{{ "%.2f"|format(p.importo) }} EUR</td>
         <td>{{ p.data_creazione.strftime('%d/%m %H:%M') }}</td>
-        <td>{{ p.data_completata.strftime('%d/%m %H:%M') if p.data_completata else '—' }}</td>
         <td>
-          {% if p.stato == 'COMPLETATA' %}<span class="badge success">{{ p.stato }}</span>
-          {% elif p.stato in ['PENDING', 'IN_CORSO'] %}<span class="badge pending">{{ p.stato }}</span>
-          {% else %}<span class="badge muted">{{ p.stato }}</span>{% endif %}
+          {% if p.stato in stati_attivi %}
+            <span class="countdown"
+                  data-id="{{ p.id }}"
+                  data-scadenza="{{ p.scadenza.strftime('%Y-%m-%dT%H:%M:%S') }}"
+                  style="font-variant-numeric:tabular-nums;font-size:13px;"></span>
+          {% elif p.stato == 'COMPLETATA' %}
+            <span style="color:var(--text-muted);font-size:12px;">
+              {{ p.data_completata.strftime('%H:%M') if p.data_completata else '—' }}
+            </span>
+          {% else %}
+            <span style="color:var(--text-muted);font-size:12px;">
+              Scad. {{ p.scadenza.strftime('%H:%M') }}
+            </span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.stato == 'COMPLETATA' %}
+            <span class="badge success" id="badge-{{ p.id }}">COMPLETATA</span>
+          {% elif p.stato == 'ELABORAZIONE' %}
+            <span class="badge info" id="badge-{{ p.id }}">ELABORAZIONE</span>
+          {% elif p.stato == 'CARTA_LETTA' %}
+            <span class="badge info" id="badge-{{ p.id }}">CARTA LETTA</span>
+          {% elif p.stato == 'IN_CORSO' %}
+            <span class="badge info" id="badge-{{ p.id }}">IN CORSO</span>
+          {% elif p.stato == 'PENDING' %}
+            <span class="badge pending" id="badge-{{ p.id }}">IN ATTESA</span>
+          {% elif p.stato == 'NEGATA' %}
+            <span class="badge error" id="badge-{{ p.id }}">NEGATA</span>
+          {% else %}
+            <span class="badge muted" id="badge-{{ p.id }}">{{ p.stato }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.stato in stati_attivi %}
+          <div style="display:flex;gap:6px;" id="azioni-{{ p.id }}">
+            <a href="{{ url_for('richiesta_attiva', id=p.id) }}"
+               class="btn sm primary" style="white-space:nowrap;">
+              <i class="bi bi-eye"></i> Segui
+            </a>
+            <button data-annulla="{{ p.id }}"
+                    class="btn sm danger" style="white-space:nowrap;">
+              <i class="bi bi-x"></i> Annulla
+            </button>
+          </div>
+          {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="empty">Nessuna richiesta di pagamento</td></tr>
+      <tr>
+        <td colspan="7" class="empty">
+          Nessun pagamento{% if stato_filtro %} con stato {{ stato_filtro }}{% endif %}
+        </td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+const attivi = [...document.querySelectorAll('tr[data-attivo]')]
+  .map(function(el) { return el.dataset.attivo; });
+
+function aggiornaCountdown() {
+  const ora = new Date();
+  document.querySelectorAll('.countdown').forEach(function(el) {
+    const diff = Math.floor((new Date(el.dataset.scadenza) - ora) / 1000);
+    if (diff <= 0) {
+      el.textContent = 'Scaduto';
+      el.style.color = 'var(--danger)';
+      el.style.fontWeight = '600';
+    } else {
+      const min = Math.floor(diff / 60);
+      const sec = diff % 60;
+      el.textContent = min > 0
+        ? (min + 'm ' + String(sec).padStart(2,'0') + 's')
+        : (sec + 's');
+      el.style.color = diff > 120 ? 'var(--success)' : diff > 30 ? 'var(--warning)' : 'var(--danger)';
+    }
+  });
+}
+
+function aggiornaRiga(id, stato, dataCompletata) {
+  const badge  = document.getElementById('badge-' + id);
+  const azioni = document.getElementById('azioni-' + id);
+  const cd     = document.querySelector('.countdown[data-id="' + id + '"]');
+
+  if (stato === 'COMPLETATA') {
+    if (badge)  { badge.className = 'badge success'; badge.textContent = 'COMPLETATA'; }
+    if (azioni) azioni.style.display = 'none';
+    if (cd)     { cd.textContent = dataCompletata || '—'; cd.style.color = 'var(--success)'; }
+  } else if (stato === 'ELABORAZIONE') {
+    if (badge) { badge.className = 'badge info'; badge.textContent = 'ELABORAZIONE'; }
+  } else if (stato === 'CARTA_LETTA') {
+    if (badge) { badge.className = 'badge info'; badge.textContent = 'CARTA LETTA'; }
+  } else if (stato === 'IN_CORSO') {
+    if (badge) { badge.className = 'badge info'; badge.textContent = 'IN CORSO'; }
+  } else if (stato === 'PENDING') {
+    if (badge) { badge.className = 'badge pending'; badge.textContent = 'IN ATTESA'; }
+  } else if (stato === 'NEGATA') {
+    if (badge)  { badge.className = 'badge error'; badge.textContent = 'NEGATA'; }
+    if (azioni) azioni.style.display = 'none';
+  } else if (stato === 'ANNULLATA' || stato === 'SCADUTA') {
+    if (badge)  { badge.className = 'badge muted'; badge.textContent = stato; }
+    if (azioni) azioni.style.display = 'none';
+  }
+}
+
+async function pollStati() {
+  attivi.forEach(async function(id) {
+    try {
+      const r = await fetch('/richiesta-pagamento/' + id + '/stato');
+      if (!r.ok) return;
+      const d = await r.json();
+      aggiornaRiga(id, d.stato, d.data_completata);
+    } catch(e) {}
+  });
+}
+
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('[data-annulla]');
+  if (!btn) return;
+  const id = btn.dataset.annulla;
+  if (!confirm('Annullare questa richiesta di pagamento?')) return;
+  try {
+    await fetch('/richiesta-pagamento/' + id + '/annulla', { method: 'POST' });
+    aggiornaRiga(id, 'ANNULLATA', null);
+  } catch(e) {}
+});
+
+aggiornaCountdown();
+setInterval(aggiornaCountdown, 1000);
+if (attivi.length > 0) {
+  setInterval(pollStati, 2000);
+  pollStati();
+}
+</script>
 {% endblock %}

@@ -10,7 +10,8 @@
 {% if session.esercente_id %}
 <nav class="navbar">
   <div class="nav-brand">
-    <div class="nav-logo">P</div>
+    <a href="{{ url_for('dashboard') }}" class="nav-brand" style="text-decoration:none;">
+  <div class="nav-logo">P</div>
     <span class="nav-title">POS IoT</span>
     <span class="nav-subtitle">· {{ esercente_nome }}</span>
     {% if ruolo == 'admin' %}<span class="nav-badge">Admin</span>{% endif %}

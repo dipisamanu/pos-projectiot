@@ -792,24 +792,43 @@ def richiesta_stato(id):
 def richiesta_annulla(id):
     query(
         """UPDATE richieste_pagamento SET stato='ANNULLATA'
-           WHERE id=%s AND id_esercente=%s AND stato IN ('PENDING','IN_CORSO')""",
+           WHERE id=%s AND id_esercente=%s
+           AND stato IN ('PENDING','IN_CORSO','CARTA_LETTA','ELABORAZIONE')""",
         (id, session["esercente_id"]),
     )
     return redirect(url_for("pagamenti"))
 
-
 @app.route("/pagamenti")
 @login_richiesto
 def pagamenti():
-    lista = query(
-        """SELECT id, importo, descrizione, stato, data_creazione, data_completata
-           FROM richieste_pagamento WHERE id_esercente=%s
-           ORDER BY data_creazione DESC LIMIT 100""",
-        (session["esercente_id"],),
-        fetch=True,
+    # Marca come SCADUTE le PENDING scadute
+    query(
+        """UPDATE richieste_pagamento SET stato='SCADUTA'
+           WHERE id_esercente=%s AND stato='PENDING' AND scadenza < NOW()""",
+        (session["esercente_id"],)
     )
-    return render_template("pagamenti.html", pagamenti=lista)
-
+    stato_filtro = request.args.get("stato", "").strip().upper() or None
+    if stato_filtro:
+        lista = query(
+            """SELECT id, importo, descrizione, stato, data_creazione,
+                      data_completata, scadenza
+               FROM richieste_pagamento WHERE id_esercente=%s AND stato=%s
+               ORDER BY data_creazione DESC LIMIT 100""",
+            (session["esercente_id"], stato_filtro), fetch=True)
+    else:
+        lista = query(
+            """SELECT id, importo, descrizione, stato, data_creazione,
+                      data_completata, scadenza
+               FROM richieste_pagamento WHERE id_esercente=%s
+               ORDER BY data_creazione DESC LIMIT 100""",
+            (session["esercente_id"],), fetch=True)
+    pending_count = query(
+        """SELECT COUNT(*) AS n FROM richieste_pagamento
+           WHERE id_esercente=%s AND stato IN ('PENDING','IN_CORSO')
+           AND scadenza > NOW()""",
+        (session["esercente_id"],), fetch=True, one=True)["n"]
+    return render_template("pagamenti.html", pagamenti=lista,
+                           stato_filtro=stato_filtro, pending_count=pending_count)
 
 @app.route("/pay/<token>", methods=["GET", "POST"])
 def pay_cliente(token):

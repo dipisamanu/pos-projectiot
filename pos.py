@@ -448,10 +448,10 @@ def gestisci_richiesta(richiesta):
     aggiorna_stato_richiesta(id_r, "IN_CORSO")
 
     led_blu()
-    uid = leggi_carta_timeout(60)
+    uid = leggi_carta_timeout(120) 
 
     if uid is None:
-        aggiorna_stato_richiesta(id_r, "PENDING")
+        aggiorna_stato_richiesta(id_r, 'ANNULLATA')   # era 'PENDING'
         beep_warning()
         led_viola()
         mostra("Annullato", "", 2)
@@ -460,24 +460,25 @@ def gestisci_richiesta(richiesta):
 
     utente = cerca_utente(uid)
     if utente is None:
-        aggiorna_stato_richiesta(id_r, "PENDING")
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")
         beep_errore()
         led_blink(1, 0, 0, n=4)
         mostra("Carta", "Non valida", 3)
         return
 
     if not utente["attiva"]:
-        aggiorna_stato_richiesta(id_r, "PENDING")
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")
         beep_errore()
         led_blink(1, 0, 0, n=6)
         mostra("Carta", "Bloccata", 3)
         return
 
     mostra("Ciao", utente["nome"], 2)
+    aggiorna_stato_richiesta(id_r, 'CARTA_LETTA')
 
     pin = inserisci_pin()
     if pin is None:
-        aggiorna_stato_richiesta(id_r, "PENDING")
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")
         beep_warning()
         led_viola()
         mostra("Annullato", "", 2)
@@ -486,6 +487,7 @@ def gestisci_richiesta(richiesta):
 
     led_giallo()
     mostra("Elaboro...", "")
+    aggiorna_stato_richiesta(id_r, 'ELABORAZIONE')
     esito, nuovo_saldo = esegui_pagamento(
         utente["uid"], pin, importo, titolo=f"{descr} - {negozio}", id_richiesta=id_r
     )
@@ -505,16 +507,15 @@ def gestisci_richiesta(richiesta):
         led_blink(1, 0, 0, n=5)
         mostra("Fondi", "Insufficienti", 3)
     elif esito == "NEGATA_BLOCCATA":
-        aggiorna_stato_richiesta(id_r, "PENDING")
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")
         beep_errore()
         led_blink(1, 0, 0, n=6)
         mostra("Carta", "Bloccata", 3)
     else:
-        aggiorna_stato_richiesta(id_r, "PENDING")
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")
         beep_errore()
         led_blink(1, 0, 0, n=3)
         mostra("Errore DB", "Riprova", 3)
-
 
 def cerca_scan_pendente():
     """Controlla se il portale web ha richiesto una scansione UID."""
@@ -532,7 +533,6 @@ def cerca_scan_pendente():
     except Exception:
         return None
 
-
 def completa_scan(scan_id, uid):
     """Salva l'UID letto nel DB e segna la scansione come completata."""
     try:
@@ -545,7 +545,6 @@ def completa_scan(scan_id, uid):
         cur.close()
     except Exception:
         pass
-
 
 def gestisci_scan(scan_id):
     """Legge un tag NFC e salva l'UID per la registrazione via portale."""
@@ -578,11 +577,9 @@ def gestisci_scan(scan_id):
     led_off()
     mostra("POS IoT", "In attesa...")
 
-
 # ============================================================
 # Main loop
 # ============================================================
-
 
 def main():
     try:
