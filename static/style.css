@@ -247,6 +247,7 @@ h3 {
   place-items: center;
   font-size: 18px;
   background: var(--primary-light);
+  color: var(--primary);
   margin-bottom: 12px;
 }
 
@@ -285,31 +286,37 @@ h3 {
   pointer-events: none;
 }
 
+/* Sfondi e colori TONO SU TONO eleganti */
 .stat-accent {
   width: 42px;
   height: 42px;
   border-radius: 10px;
   display: grid;
   place-items: center;
-  font-size: 20px;
   margin-bottom: 14px;
   background: var(--primary-light);
+  color: var(--primary);
+  /* Colore icona di default */
 }
 
 .stat-card.success .stat-accent {
   background: var(--success-bg);
+  color: var(--success);
 }
 
 .stat-card.warning .stat-accent {
   background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .stat-card.danger .stat-accent {
   background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .stat-card.info .stat-accent {
   background: var(--info-bg);
+  color: var(--info);
 }
 
 .stat-num {
@@ -373,9 +380,8 @@ h3 {
 }
 
 .action-icon {
-  font-size: 26px;
-  margin-bottom: 12px;
   display: block;
+  margin-bottom: 14px;
 }
 
 .action-card h3 {
@@ -1130,7 +1136,7 @@ h3 {
 }
 
 /* ═══════════════════════════════════════
-   ICONE BOOTSTRAP (Stili Eleganti)
+   ICONE BOOTSTRAP (Stili Eleganti e Dashboard)
 ═══════════════════════════════════════ */
 .bi {
   display: inline-block;
@@ -1138,7 +1144,7 @@ h3 {
   transition: all var(--transition);
 }
 
-/* Icone nella Navbar (sfondo chiaro/bianco) */
+/* --- 1. Icone nella Navbar (sfondo chiaro/bianco) --- */
 .navbar .nav-links a .bi {
   font-size: 1.25em;
   margin-right: 6px;
@@ -1156,14 +1162,44 @@ h3 {
   /* Si colorano di blu assieme al testo */
 }
 
-/* Icone nei bottoni e alert */
+/* --- 2. Icone nelle Card Statistiche (Tono su Tono) --- */
+.stat-accent .bi {
+  font-size: 24px;
+  /* Dimensione adeguata alla card */
+  margin: 0;
+  /* L'icona si colorerà automaticamente del colore semantico
+     che abbiamo assegnato al .stat-accent poco sopra */
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  /* Leggera ombra per staccare dal fondo */
+}
+
+/* --- 3. Icone nelle Operazioni Rapide (Effetto Interattivo) --- */
+.action-icon .bi {
+  font-size: 28px;
+  margin: 0;
+  color: var(--text-light);
+  /* Colore lilla grigiastro spento e tenue */
+  transition: all 0.3s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Quando si passa sulla card, l'icona prende vita */
+.action-card:hover .action-icon .bi {
+  color: var(--primary);
+  /* Diventa blu brillante */
+  transform: scale(1.15) translateY(-2px);
+  /* Si ingrandisce e sale verso l'alto */
+  filter: drop-shadow(0 4px 8px var(--primary-glow));
+  /* Emette una "luce" blu */
+}
+
+/* --- 4. Icone nei bottoni e alert generici --- */
 .btn .bi {
   font-size: 1.1em;
   margin-right: 2px;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1));
 }
 
-/* Icona gigante di successo nella schermata Pay Cliente (Mobile) */
+/* Icona gigante di successo nella schermata Pay Cliente */
 .pay-success-wrap .check i.bi-check-circle-fill {
   color: var(--success);
   font-size: 56px;
@@ -1176,10 +1212,4 @@ h3 {
 .alert.error i.bi-exclamation-triangle-fill {
   font-size: 1.25em;
   margin-right: 4px;
-}
-
-/* Icona Dashboard stat-accent (evita ingrandimenti errati) */
-.stat-accent .bi {
-  font-size: 20px;
-  margin: 0;
 }
