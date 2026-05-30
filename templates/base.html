@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,39 +8,44 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
+
 <body>
-{% if session.esercente_id %}
-<nav class="navbar">
-  <div class="nav-brand">
-    <a href="{{ url_for('dashboard') }}" class="nav-brand" style="text-decoration:none;">
-  <div class="nav-logo">P</div>
-    <span class="nav-title">POS IoT</span>
-    <span class="nav-subtitle">· {{ esercente_nome }}</span>
-    {% if ruolo == 'admin' %}<span class="nav-badge">Admin</span>{% endif %}
-  </div>
-  <div class="nav-links">
-    <a href="{{ url_for('dashboard') }}"> <span>Dashboard</span></a>
-    {% if ruolo == 'admin' %}
-      <a href="{{ url_for('richiesta_pagamento') }}"><span>Richiedi pagamento</span></a>
-      <a href="{{ url_for('pagamenti') }}"><span>Pagamenti</span></a>
-      <a href="{{ url_for('ricarica') }}"><span>Ricarica QR</span></a>
-      <a href="{{ url_for('ricariche') }}"><span>Storico QR</span></a>
-      <a href="{{ url_for('utenti') }}"><span>Clienti</span></a>
-      <a href="{{ url_for('transazioni') }}"><span>Transazioni</span></a>
-      <a href="{{ url_for('nuovo_utente') }}"><span>Registra cliente</span></a>
-    {% else %}
-      <a href="{{ url_for('richiesta_pagamento') }}"><span>Richiedi pagamento</span></a>
-      <a href="{{ url_for('pagamenti') }}"><span>Pagamenti</span></a>
-      <a href="{{ url_for('ricarica') }}"><span>Ricarica QR</span></a>
-      <a href="{{ url_for('ricariche') }}"><span>Storico QR</span></a>
-      <a href="{{ url_for('nuovo_utente') }}"><span>Registra cliente</span></a>
-    {% endif %}
-    <a href="{{ url_for('logout') }}" class="nav-logout"><span>Esci</span></a>
-  </div>
-</nav>
-{% endif %}
-<main class="container">
-  {% block content %}{% endblock %}
-</main>
+  {% if session.esercente_id %}
+  <nav class="navbar">
+    <div class="nav-brand">
+      <a href="{{ url_for('dashboard') }}" class="nav-brand" style="text-decoration:none;">
+        <div class="nav-logo">P</div>
+        <span class="nav-title">POS IoT</span>
+        <span class="nav-subtitle">· {{ esercente_nome }}</span>
+        {% if ruolo == 'admin' %}<span class="nav-badge">Admin</span>{% endif %}
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="{{ url_for('dashboard') }}"> <i class="bi bi-speedometer2"></i><span>Dashboard</span></a>
+      {% if ruolo == 'admin' %}
+      <a href="{{ url_for('richiesta_pagamento') }}"><i class="bi bi-credit-card"></i><span>Richiedi
+          pagamento</span></a>
+      <a href="{{ url_for('pagamenti') }}"><i class="bi bi-cash-stack"></i><span>Pagamenti</span></a>
+      <a href="{{ url_for('ricarica') }}"><i class="bi bi-qr-code-scan"></i><span>Ricarica QR</span></a>
+      <a href="{{ url_for('ricariche') }}"><i class="bi bi-clock-history"></i><span>Storico QR</span></a>
+      <a href="{{ url_for('utenti') }}"><i class="bi bi-people"></i><span>Clienti</span></a>
+      <a href="{{ url_for('transazioni') }}"><i class="bi bi-list-columns-reverse"></i><span>Transazioni</span></a>
+      <a href="{{ url_for('nuovo_utente') }}"><i class="bi bi-person-plus"></i><span>Registra cliente</span></a>
+      {% else %}
+      <a href="{{ url_for('richiesta_pagamento') }}"><i class="bi bi-credit-card"></i><span>Richiedi
+          pagamento</span></a>
+      <a href="{{ url_for('pagamenti') }}"><i class="bi bi-cash-stack"></i><span>Pagamenti</span></a>
+      <a href="{{ url_for('ricarica') }}"><i class="bi bi-qr-code-scan"></i><span>Ricarica QR</span></a>
+      <a href="{{ url_for('ricariche') }}"><i class="bi bi-clock-history"></i><span>Storico QR</span></a>
+      <a href="{{ url_for('nuovo_utente') }}"><i class="bi bi-person-plus"></i><span>Registra cliente</span></a>
+      {% endif %}
+      <a href="{{ url_for('logout') }}" class="nav-logout"><i class="bi bi-box-arrow-right"></i><span>Esci</span></a>
+    </div>
+  </nav>
+  {% endif %}
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
 </body>
+
 </html>
