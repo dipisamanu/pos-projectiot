@@ -326,12 +326,11 @@ def cerca_richiesta_pendente():
         conn = get_conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT r.id, r.importo, r.descrizione, e.nome_negozio
-            FROM richieste_pagamento r
-            JOIN esercenti e ON e.id = r.id_esercente
-            WHERE r.stato = 'PENDING' AND r.scadenza > NOW()
-            ORDER BY r.data_creazione ASC
-            LIMIT 1
+        SELECT r.id, r.importo, r.descrizione, r.categoria, e.nome_negozio
+        FROM richieste_pagamento r
+        JOIN esercenti e ON e.id = r.id_esercente
+        WHERE r.stato = 'PENDING' AND r.scadenza > NOW()
+        ORDER BY r.data_creazione ASC LIMIT 1
         """)
         r = cur.fetchone()
         cur.close()
@@ -353,7 +352,7 @@ def aggiorna_stato_richiesta(id_r, stato):
         pass
 
 
-def esegui_pagamento(uid, pin, importo, titolo="Pagamento POS", id_richiesta=None):
+def esegui_pagamento(uid, pin, importo, titolo="Pagamento POS", categoria="other", id_richiesta=None):
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -387,16 +386,8 @@ def esegui_pagamento(uid, pin, importo, titolo="Pagamento POS", id_richiesta=Non
                 """INSERT INTO transazioni
                    (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                     importo, saldo_prima, saldo_dopo, esito)
-                   VALUES (%s,%s,%s,%s,'expense','other',%s,%s,%s,'NEGATA_FONDI')""",
-                (
-                    u["id"],
-                    u["uid"],
-                    u["nome"],
-                    titolo,
-                    importo,
-                    saldo_prima,
-                    saldo_prima,
-                ),
+                   VALUES (%s,%s,%s,%s,'expense',%s,%s,%s,%s,'NEGATA_FONDI')""",
+                (u["id"], u["uid"], u["nome"], titolo, categoria, importo, saldo_prima, saldo_prima),
             )
             if id_richiesta:
                 cur.execute(
@@ -412,8 +403,8 @@ def esegui_pagamento(uid, pin, importo, titolo="Pagamento POS", id_richiesta=Non
             """INSERT INTO transazioni
                (id_utente, uid_carta, nome_utente, titolo, tipo, categoria,
                 importo, saldo_prima, saldo_dopo, esito)
-               VALUES (%s,%s,%s,%s,'expense','other',%s,%s,%s,'APPROVATA')""",
-            (u["id"], u["uid"], u["nome"], titolo, importo, saldo_prima, saldo_dopo),
+               VALUES (%s,%s,%s,%s,'expense',%s,%s,%s,%s,'APPROVATA')""",
+            (u["id"], u["uid"], u["nome"], titolo, categoria, importo, saldo_prima, saldo_dopo),
         )
         if id_richiesta:
             cur.execute(
@@ -448,10 +439,10 @@ def gestisci_richiesta(richiesta):
     aggiorna_stato_richiesta(id_r, "IN_CORSO")
 
     led_blu()
-    uid = leggi_carta_timeout(120) 
+    uid = leggi_carta_timeout(120)
 
     if uid is None:
-        aggiorna_stato_richiesta(id_r, 'ANNULLATA')   # era 'PENDING'
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")  # era 'PENDING'
         beep_warning()
         led_viola()
         mostra("Annullato", "", 2)
@@ -474,7 +465,7 @@ def gestisci_richiesta(richiesta):
         return
 
     mostra("Ciao", utente["nome"], 2)
-    aggiorna_stato_richiesta(id_r, 'CARTA_LETTA')
+    aggiorna_stato_richiesta(id_r, "CARTA_LETTA")
 
     pin = inserisci_pin()
     if pin is None:
@@ -487,9 +478,9 @@ def gestisci_richiesta(richiesta):
 
     led_giallo()
     mostra("Elaboro...", "")
-    aggiorna_stato_richiesta(id_r, 'ELABORAZIONE')
+    aggiorna_stato_richiesta(id_r, "ELABORAZIONE")
     esito, nuovo_saldo = esegui_pagamento(
-        utente["uid"], pin, importo, titolo=f"{descr} - {negozio}", id_richiesta=id_r
+        utente["uid"], pin, importo, titolo=f"{descr} - {negozio}", categoria=richiesta.get("categoria", "other"), id_richiesta=id_r
     )
 
     if esito == "APPROVATA":
@@ -517,6 +508,7 @@ def gestisci_richiesta(richiesta):
         led_blink(1, 0, 0, n=3)
         mostra("Errore DB", "Riprova", 3)
 
+
 def cerca_scan_pendente():
     """Controlla se il portale web ha richiesto una scansione UID."""
     try:
@@ -533,6 +525,7 @@ def cerca_scan_pendente():
     except Exception:
         return None
 
+
 def completa_scan(scan_id, uid):
     """Salva l'UID letto nel DB e segna la scansione come completata."""
     try:
@@ -545,6 +538,7 @@ def completa_scan(scan_id, uid):
         cur.close()
     except Exception:
         pass
+
 
 def gestisci_scan(scan_id):
     """Legge un tag NFC e salva l'UID per la registrazione via portale."""
@@ -577,9 +571,11 @@ def gestisci_scan(scan_id):
     led_off()
     mostra("POS IoT", "In attesa...")
 
+
 # ============================================================
 # Main loop
 # ============================================================
+
 
 def main():
     try:
@@ -621,7 +617,6 @@ def main():
             pass
         sys.stderr = _stderr_orig
         GPIO.cleanup()
-
 
 if __name__ == "__main__":
     main()

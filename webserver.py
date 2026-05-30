@@ -735,13 +735,16 @@ def richiesta_pagamento():
         descrizione = (
             request.form.get("descrizione", "Pagamento POS").strip() or "Pagamento POS"
         )
+        categoria = request.form.get("categoria", "other").strip()
+        if categoria not in CATEGORIE_VALIDE:
+            categoria = "other"
         scadenza = datetime.now() + timedelta(minutes=10)
         row = query(
-            """INSERT INTO richieste_pagamento (id_esercente, importo, descrizione, scadenza)
-               VALUES (%s, %s, %s, %s) RETURNING id""",
-            (session["esercente_id"], importo, descrizione, scadenza),
-            fetch=True,
-            one=True,
+            """INSERT INTO richieste_pagamento
+            (id_esercente, importo, descrizione, categoria, scadenza)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (session["esercente_id"], importo, descrizione, categoria, scadenza),
+            fetch=True, one=True,
         )
         return redirect(url_for("richiesta_attiva", id=row["id"]))
     return render_template("richiesta_pagamento.html", errore=errore)
