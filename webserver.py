@@ -610,12 +610,48 @@ def scan_annulla(scan_id):
 @app.route("/transazioni")
 @admin_richiesto
 def transazioni():
-    # Log anonimizzato: ID, data, importo, esito
-    lista = query(
-        "SELECT id, data_ora, importo, esito FROM transazioni ORDER BY data_ora DESC LIMIT 100",
-        fetch=True,
+    oggi = query(
+        """SELECT COUNT(*) AS n FROM transazioni
+           WHERE esito='APPROVATA' AND date_trunc('day', data_ora)=date_trunc('day', NOW())""",
+        fetch=True, one=True)["n"]
+    settimana = query(
+        """SELECT COUNT(*) AS n FROM transazioni
+           WHERE esito='APPROVATA' AND data_ora >= date_trunc('week', NOW())""",
+        fetch=True, one=True)["n"]
+    mese = query(
+        """SELECT COUNT(*) AS n FROM transazioni
+           WHERE esito='APPROVATA' AND date_trunc('month', data_ora)=date_trunc('month', NOW())""",
+        fetch=True, one=True)["n"]
+    volume_mese = query(
+        """SELECT COALESCE(SUM(importo),0) AS tot FROM transazioni
+           WHERE esito='APPROVATA' AND tipo='expense'
+           AND date_trunc('month', data_ora)=date_trunc('month', NOW())""",
+        fetch=True, one=True)["tot"]
+    per_esito = query(
+        "SELECT esito, COUNT(*) AS n FROM transazioni GROUP BY esito ORDER BY n DESC",
+        fetch=True)
+    per_categoria = query(
+        """SELECT categoria, COUNT(*) AS n, COALESCE(SUM(importo),0) AS tot
+           FROM transazioni
+           WHERE esito='APPROVATA' AND tipo='expense'
+           AND date_trunc('month', data_ora)=date_trunc('month', NOW())
+           GROUP BY categoria ORDER BY tot DESC""",
+        fetch=True)
+    importi = query(
+        """SELECT COALESCE(AVG(importo),0) AS media,
+                  COALESCE(MAX(importo),0) AS massimo,
+                  COALESCE(MIN(importo),0) AS minimo
+           FROM transazioni WHERE esito='APPROVATA'
+           AND date_trunc('month', data_ora)=date_trunc('month', NOW())""",
+        fetch=True, one=True)
+    return render_template("transazioni.html",
+        oggi=oggi, settimana=settimana, mese=mese,
+        volume_mese=float(volume_mese),
+        per_esito=per_esito, per_categoria=per_categoria,
+        media_importo=float(importi["media"]),
+        max_importo=float(importi["massimo"]),
+        min_importo=float(importi["minimo"]),
     )
-    return render_template("transazioni.html", transazioni=lista)
 
 
 @app.route("/ricarica", methods=["GET", "POST"])

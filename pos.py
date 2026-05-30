@@ -429,9 +429,9 @@ def esegui_pagamento(uid, pin, importo, titolo="Pagamento POS", categoria="other
 
 def gestisci_richiesta(richiesta):
     importo = Decimal(str(richiesta["importo"]))
-    descr = richiesta["descrizione"][:16]
+    descr   = richiesta["descrizione"][:16]
     negozio = richiesta["nome_negozio"][:16]
-    id_r = richiesta["id"]
+    id_r    = richiesta["id"]
 
     beep_richiesta()
     led_giallo()
@@ -442,7 +442,7 @@ def gestisci_richiesta(richiesta):
     uid = leggi_carta_timeout(120)
 
     if uid is None:
-        aggiorna_stato_richiesta(id_r, "ANNULLATA")  # era 'PENDING'
+        aggiorna_stato_richiesta(id_r, "ANNULLATA")
         beep_warning()
         led_viola()
         mostra("Annullato", "", 2)
@@ -464,8 +464,9 @@ def gestisci_richiesta(richiesta):
         mostra("Carta", "Bloccata", 3)
         return
 
-    mostra("Ciao", utente["nome"], 2)
+    # Carta valida — non mostriamo il nome per privacy
     aggiorna_stato_richiesta(id_r, "CARTA_LETTA")
+    mostra("Carta OK", "Inserisci PIN", 1)
 
     pin = inserisci_pin()
     if pin is None:
@@ -476,16 +477,20 @@ def gestisci_richiesta(richiesta):
         led_off()
         return
 
+    aggiorna_stato_richiesta(id_r, "ELABORAZIONE")
     led_giallo()
     mostra("Elaboro...", "")
-    aggiorna_stato_richiesta(id_r, "ELABORAZIONE")
+
     esito, nuovo_saldo = esegui_pagamento(
-        utente["uid"], pin, importo, titolo=f"{descr} - {negozio}", categoria=richiesta.get("categoria", "other"), id_richiesta=id_r
+        utente["uid"], pin, importo,
+        titolo=f"{descr} - {negozio}",
+        categoria=richiesta.get("categoria", "other"),
+        id_richiesta=id_r
     )
 
     if esito == "APPROVATA":
         beep_ok()
-        mostra("Approvata", f"{nuovo_saldo:.2f} EUR")
+        mostra("Approvata", "", 3)   # niente saldo per privacy
         led_blink(0, 1, 0, n=6)
         time.sleep(1)
     elif esito == "NEGATA_PIN":
