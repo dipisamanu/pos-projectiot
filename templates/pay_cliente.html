@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ricarica conto — POS IoT</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
+
 <body class="pay-page">
   <div class="pay-wrap">
     {% if successo %}
@@ -35,15 +38,18 @@
     <form method="POST">
       <div class="form-group">
         <label class="form-label">UID della tua carta</label>
-        <input class="form-control" type="text" name="uid" required autofocus inputmode="numeric" placeholder="es. 584195345601">
+        <input class="form-control" type="text" name="uid" required autofocus inputmode="numeric"
+          placeholder="es. 584195345601">
       </div>
       <div class="form-group">
         <label class="form-label">PIN (4 cifre)</label>
-        <input class="form-control" type="password" name="pin" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" placeholder="••••">
+        <input class="form-control" type="password" name="pin" required pattern="[0-9]{4}" maxlength="4"
+          inputmode="numeric" placeholder="••••">
       </div>
       <button type="submit" class="btn primary big">Conferma ricarica →</button>
     </form>
     {% endif %}
   </div>
 </body>
+
 </html>
